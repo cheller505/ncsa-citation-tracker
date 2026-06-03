@@ -10,12 +10,12 @@
 - [x] **Step 2: Database Architecture**
     - [x] Create citations.db
     - [x] Implement schema
-- [ ] **Step 3: Search, Retrieval, & Ingestion Pipeline**
-    - [ ] Implement ingest_alert.py
-    - [ ] Multi-source document search (Crossref, Semantic Scholar, arXiv, Unpaywall)
-    - [ ] PDF/Text extraction
-    - [ ] LLM evaluation logic
-    - [ ] Metadata extraction & Upsert logic
+- [x] **Step 3: Search, Retrieval, & Ingestion Pipeline**
+    - [x] Implement ingest_alert.py
+    - [x] Multi-source document search (Crossref, Semantic Scholar, arXiv, Unpaywall)
+    - [x] PDF/Text extraction
+    - [x] LLM evaluation logic
+    - [x] Metadata extraction & Upsert logic
 - [ ] **Step 4: Interactive Web Dashboard**
     - [ ] Create app.py (Streamlit)
     - [ ] Triage Queue tab
