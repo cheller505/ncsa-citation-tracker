@@ -7,9 +7,9 @@
     - [x] Create .gitignore
     - [x] Create project_status.md
     - [x] Initial commit
-- [ ] **Step 2: Database Architecture**
-    - [ ] Create citations.db
-    - [ ] Implement schema
+- [x] **Step 2: Database Architecture**
+    - [x] Create citations.db
+    - [x] Implement schema
 - [ ] **Step 3: Search, Retrieval, & Ingestion Pipeline**
     - [ ] Implement ingest_alert.py
     - [ ] Multi-source document search (Crossref, Semantic Scholar, arXiv, Unpaywall)
