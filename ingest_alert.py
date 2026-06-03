@@ -110,23 +110,21 @@ class CitationIngestor:
     def evaluate_with_llm(self, title, context):
         """
         Placeholder for Local LLM Engine.
-        In a real implementation, this would call an API (e.g., Ollama, OpenAI-compatible local server).
-        For this prototype, we'll use keyword-based logic but structure it for easy LLM integration.
         """
         print(f"Evaluating citation for: {title}")
         
-        # Simplified logic for demonstration
+        full_text = f"{title}\n{context}"
         keywords = ["Delta", "DeltaAI", "NCSA", "OAC-2005572", "OAC-2320345"]
-        found_keywords = [k for k in keywords if k.lower() in context.lower()]
+        found_keywords = [k for k in keywords if k.lower() in full_text.lower()]
         
         # False positive checks
         false_positives = ["delta variant", "delta function", "river delta", "delta dense matter"]
-        is_false_positive = any(fp in context.lower() for fp in false_positives)
+        is_false_positive = any(fp in full_text.lower() for fp in false_positives)
 
         if found_keywords and not is_false_positive:
-            status = 'Verified'
-            reasoning = f"Matched triggers: {', '.join(found_keywords)}. No false positives detected."
-            usage_context = "Found mention in text context." # In real LLM, this would be the actual snippet
+            status = 'Pending'
+            reasoning = f"Potential match found. Triggers: {', '.join(found_keywords)}."
+            usage_context = f"Mentioned in: {title}" 
         else:
             status = 'Rejected'
             reasoning = "Does not mention Delta/DeltaAI supercomputers or is a false positive."
