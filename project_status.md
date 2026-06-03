@@ -16,11 +16,11 @@
     - [x] PDF/Text extraction
     - [x] LLM evaluation logic
     - [x] Metadata extraction & Upsert logic
-- [ ] **Step 4: Interactive Web Dashboard**
-    - [ ] Create app.py (Streamlit)
-    - [ ] Triage Queue tab
-    - [ ] Verified Inventory tab
-    - [ ] Rejection Log tab
+- [x] **Step 4: Interactive Web Dashboard**
+    - [x] Create app.py (Streamlit)
+    - [x] Triage Queue tab
+    - [x] Verified Inventory tab
+    - [x] Rejection Log tab
 - [ ] **Step 5: Validation & Execution**
     - [ ] Install dependencies
     - [ ] Run Streamlit app
