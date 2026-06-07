@@ -37,9 +37,9 @@ c1.metric("Pending", counts.get("Pending", 0))
 c2.metric("Verified", counts.get("Verified", 0))
 c3.metric("Rejected", counts.get("Rejected", 0))
 
-tab_triage, tab_verified, tab_rejected, tab_ask, tab_about, tab_add = st.tabs(
+tab_triage, tab_verified, tab_rejected, tab_stats, tab_ask, tab_about, tab_add = st.tabs(
     ["📥 Triage Queue", "✅ Verified Inventory", "📋 Rejection Log",
-     "💬 Ask", "ℹ️ About", "➕ Manual Add"]
+     "📊 Stats", "💬 Ask", "ℹ️ About", "➕ Manual Add"]
 )
 
 # --------------------------------------------------------------------------- #
@@ -193,6 +193,60 @@ with tab_rejected:
                 st.rerun()
         st.download_button("⬇ Export rejection log (CSV)", export.to_csv("Rejected"),
                            file_name="rejected_citations.csv", mime="text/csv")
+
+# --------------------------------------------------------------------------- #
+# Stats tab — reporting view (per system, per award, by status)                #
+# --------------------------------------------------------------------------- #
+with tab_stats:
+    st.header("Citations at a glance")
+    all_rows = [dict(r) for r in db.fetch_all()]
+    if not all_rows:
+        st.info("No citations yet.")
+    else:
+        adf = pd.DataFrame(all_rows)
+        adf["systems"] = adf["systems"].fillna("").replace("", None).fillna(adf["system"]).fillna("Unknown")
+
+        def _explode_systems(frame: pd.DataFrame) -> pd.Series:
+            names = []
+            for val in frame["systems"]:
+                parts = [p.strip() for p in str(val).split(",") if p.strip()]
+                names.extend(parts or ["Unknown"])
+            return pd.Series(names, dtype="object")
+
+        st.subheader("By status")
+        status_counts = adf["status"].value_counts()
+        sc1, sc2, sc3 = st.columns(3)
+        sc1.metric("Verified", int(status_counts.get("Verified", 0)))
+        sc2.metric("Pending", int(status_counts.get("Pending", 0)))
+        sc3.metric("Rejected", int(status_counts.get("Rejected", 0)))
+
+        st.subheader("Verified citations per system")
+        verified_df = adf[adf["status"] == "Verified"]
+        if verified_df.empty:
+            st.caption("No verified citations yet.")
+        else:
+            per_system = _explode_systems(verified_df).value_counts()
+            per_system = per_system.reindex(SYSTEM_NAMES).dropna().astype(int)
+            if not per_system.empty:
+                st.bar_chart(per_system)
+            st.dataframe(per_system.rename("verified papers").reset_index().rename(
+                columns={"index": "system"}), use_container_width=True, hide_index=True)
+
+        st.subheader("Verified citations per NSF award")
+        award_rows = verified_df[verified_df["award_number"].fillna("") != ""]
+        if award_rows.empty:
+            st.caption("No verified citations with an extracted NSF award yet.")
+        else:
+            awards = []
+            for val in award_rows["award_number"]:
+                awards.extend([a.strip() for a in str(val).split(",") if a.strip()])
+            aser = pd.Series(awards).value_counts().rename("verified papers")
+            st.dataframe(aser.reset_index().rename(columns={"index": "award"}),
+                         use_container_width=True, hide_index=True)
+
+        st.subheader("UIUC-affiliated (verified)")
+        uiuc_n = int(verified_df["uiuc_affiliated"].fillna(0).astype(int).sum()) if not verified_df.empty else 0
+        st.metric("Verified papers with a UIUC author", uiuc_n)
 
 # --------------------------------------------------------------------------- #
 # Ask tab — scope-limited chat over the tracked data                           #

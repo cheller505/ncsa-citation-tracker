@@ -134,15 +134,9 @@ def _route_status(evaluation: Evaluation) -> str:
     return "Pending" if evaluation.uses_system else "Rejected"
 
 
-def ingest(title: str, trigger: str = "", db_path: Path | str | None = None) -> IngestResult:
-    """Run one paper through the full pipeline and persist the result."""
-    title = title.strip()
-    if not title:
-        raise ValueError("Empty title")
-    log.info("Ingesting: %s (trigger=%r)", title, trigger)
-
+def _evaluate_title(title: str, trigger: str) -> tuple[Evaluation, WorkMetadata, str]:
+    """Gather metadata, fetch acknowledgements, and evaluate. Shared by ingest+reevaluate."""
     meta = _gather_metadata(title)
-
     full_text = fetch_pdf_text(meta.pdf_url) if meta.pdf_url else ""
     eval_text = meta.abstract or full_text
     award_terms = systems.all_awards()
@@ -151,21 +145,30 @@ def ingest(title: str, trigger: str = "", db_path: Path | str | None = None) -> 
     ]
     acknowledgements = extract_acknowledgements(full_text, award_terms + system_terms)
 
-    # Evaluate: LLM first, heuristic fallback.
     try:
         evaluation = llm.evaluate(title, meta.abstract, full_text, trigger, acknowledgements)
     except LLMError as exc:
         log.warning("LLM evaluation unavailable (%s); using heuristic.", exc)
         evaluation = _heuristic_eval(title, eval_text + "\n" + acknowledgements, trigger)
 
-    status = _route_status(evaluation)
-    matched_systems = evaluation.systems
-
     award_number = _extract_awards(f"{eval_text}\n{acknowledgements}\n{title}")
     if meta.award_numbers:
         award_number = ", ".join(
             dict.fromkeys(meta.award_numbers + ([award_number] if award_number else []))
         )
+    return evaluation, meta, award_number
+
+
+def ingest(title: str, trigger: str = "", db_path: Path | str | None = None) -> IngestResult:
+    """Run one paper through the full pipeline and persist the result."""
+    title = title.strip()
+    if not title:
+        raise ValueError("Empty title")
+    log.info("Ingesting: %s (trigger=%r)", title, trigger)
+
+    evaluation, meta, award_number = _evaluate_title(title, trigger)
+    status = _route_status(evaluation)
+    matched_systems = evaluation.systems
 
     record = {
         "title": title,
@@ -194,3 +197,70 @@ def ingest(title: str, trigger: str = "", db_path: Path | str | None = None) -> 
         systems=matched_systems, action=action, row_id=row_id,
         confidence=evaluation.confidence, evaluator=evaluation.source, doi_url=meta.doi_url,
     )
+
+
+@dataclass
+class ReevalSummary:
+    checked: int = 0
+    changed: int = 0
+    recovered: int = 0      # Rejected -> Pending (false negatives recovered)
+    errors: int = 0
+    changes: list[dict] = None  # type: ignore
+
+    def __post_init__(self):
+        if self.changes is None:
+            self.changes = []
+
+
+def reevaluate(status: str = "Rejected", limit: int | None = None,
+               db_path: Path | str | None = None) -> ReevalSummary:
+    """Re-run the current evaluator over existing records and update verdicts.
+
+    Recovers false negatives created before improvements (multi-system support,
+    acknowledgement-text extraction). Force-updates the verdict; never touches
+    Verified records (those are human-confirmed).
+    """
+    if status == "Verified":
+        raise ValueError("Refusing to re-evaluate human-Verified records.")
+    rows = (db.fetch_all(db_path=db_path, limit=limit) if status == "all"
+            else db.fetch_by_status(status, db_path=db_path))
+    if limit and status != "all":
+        rows = rows[:limit]
+
+    summary = ReevalSummary()
+    for row in rows:
+        if row["status"] == "Verified":
+            continue
+        old_status = row["status"]
+        title = row["title"]
+        trigger = row["alert_trigger"] or "reevaluate"
+        try:
+            evaluation, meta, award_number = _evaluate_title(title, trigger)
+        except Exception as exc:  # noqa: BLE001
+            summary.errors += 1
+            log.error("Re-eval failed for %r: %s", title, exc)
+            continue
+        summary.checked += 1
+        new_status = _route_status(evaluation)
+        matched = evaluation.systems
+        db.update_evaluation(row["id"], {
+            "system": matched[0] if matched else "Unknown",
+            "systems": ", ".join(matched),
+            "status": new_status,
+            "confidence": evaluation.confidence,
+            "reasoning": evaluation.reasoning,
+            "usage_context": evaluation.usage_context,
+            "award_number": award_number or row["award_number"],
+            "source": f"{evaluation.source}-reeval",
+        }, db_path=db_path)
+        if new_status != old_status:
+            summary.changed += 1
+            if old_status == "Rejected" and new_status == "Pending":
+                summary.recovered += 1
+            summary.changes.append({
+                "title": title, "from": old_status, "to": new_status,
+                "systems": matched, "confidence": evaluation.confidence,
+            })
+            log.info("Re-eval changed id=%s %s -> %s (%s, conf=%.2f)",
+                     row["id"], old_status, new_status, matched or "-", evaluation.confidence)
+    return summary

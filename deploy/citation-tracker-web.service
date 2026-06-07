@@ -1,20 +1,18 @@
-# systemd unit for the Streamlit dashboard.
-# Install: copy to /etc/systemd/system/, edit paths/User, then:
-#   sudo systemctl daemon-reload && sudo systemctl enable --now citation-tracker-web
+# Streamlit dashboard (private on localhost:8601; fronted by Caddy on :8501).
+# Ports/address come from .streamlit/config.toml.
 [Unit]
-Description=NCSA Delta/DeltaAI Citation Tracker (web dashboard)
+Description=NCSA Research Computing Citation Tracker (Streamlit app)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=citation
-Group=citation
-WorkingDirectory=/opt/citation-tracker
-EnvironmentFile=/opt/citation-tracker/.env
-ExecStartPre=/opt/citation-tracker/venv/bin/python -m citation_tracker.cli init
-ExecStart=/opt/citation-tracker/venv/bin/streamlit run app.py \
-    --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+User=cheller
+Group=cheller
+WorkingDirectory=/home/cheller/gemini
+EnvironmentFile=/home/cheller/gemini/.env
+ExecStartPre=/home/cheller/gemini/venv/bin/python -m citation_tracker.cli init
+ExecStart=/home/cheller/gemini/venv/bin/streamlit run app.py
 Restart=on-failure
 RestartSec=5
 

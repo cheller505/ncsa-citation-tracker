@@ -306,6 +306,29 @@ def update_fields(citation_id: int, fields: dict[str, Any], db_path: Path | str 
         )
 
 
+def update_evaluation(citation_id: int, data: dict[str, Any], db_path: Path | str | None = None) -> None:
+    """Force-update a record's evaluation verdict (used by re-evaluation).
+
+    Unlike the pipeline upsert, this deliberately overrides status — it's for
+    re-running the evaluator over existing records, not the automated firehose.
+    """
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE citations SET
+                system = ?, systems = ?, status = ?, confidence = ?,
+                reasoning = ?, usage_context = ?, award_number = ?, source = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                data.get("system"), data.get("systems"), data["status"],
+                data.get("confidence"), data.get("reasoning"), data.get("usage_context"),
+                data.get("award_number"), data.get("source"), citation_id,
+            ),
+        )
+
+
 def update_zotero_key(citation_id: int, zotero_key: str, db_path: Path | str | None = None) -> None:
     with get_conn(db_path) as conn:
         conn.execute(

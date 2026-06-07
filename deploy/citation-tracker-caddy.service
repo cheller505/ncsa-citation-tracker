@@ -1,29 +1,22 @@
-# systemd unit for the Caddy TLS reverse proxy (durable HTTPS).
+# Caddy HTTPS reverse proxy: serves https://warspite.ncsa.illinois.edu:8501
+# (reusing the cached Let's Encrypt cert in /root/.local/share/caddy) and
+# proxies to the Streamlit app on localhost:8601.
 #
-# NOTE: this host already runs a separate production Caddy for the Boneyard
-# portal at /etc/caddy/Caddyfile (port 8247). Do NOT overwrite that file. This
-# unit uses its own dedicated config + ports (80/443), so the two coexist.
-#
-# Install:
-#   sudo cp deploy/Caddyfile /etc/caddy/citation-tracker.Caddyfile
-#   sudo cp deploy/citation-tracker-caddy.service /etc/systemd/system/
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable --now citation-tracker-caddy
+# NOTE: this host also runs a separate production Caddy for the Boneyard portal
+# (/etc/caddy/Caddyfile, :8247). This unit uses its own config + ports, so the
+# two coexist. Runs as root so it finds the existing cert storage.
 [Unit]
-Description=Caddy TLS reverse proxy for the NCSA Research Computing Citation Tracker
+Description=Caddy HTTPS reverse proxy for the NCSA Research Computing Citation Tracker
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/caddy run --config /etc/caddy/citation-tracker.Caddyfile
-ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/citation-tracker.Caddyfile --force
+Environment=HOME=/root
+ExecStart=/usr/local/bin/caddy run --config /home/cheller/gemini/deploy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /home/cheller/gemini/deploy/Caddyfile --force
 Restart=on-failure
 RestartSec=5
-# Allow binding 80/443 without full root.
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-# Caddy stores certs/state here:
-Environment=XDG_DATA_HOME=/var/lib
 
 [Install]
 WantedBy=multi-user.target

@@ -143,6 +143,20 @@ def _cmd_backup(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_reevaluate(args: argparse.Namespace) -> int:
+    from .pipeline import reevaluate
+
+    summary = reevaluate(status=args.status, limit=args.limit)
+    print(
+        f"Re-evaluated {summary.checked} record(s): {summary.changed} changed, "
+        f"{summary.recovered} recovered (Rejected→Pending), {summary.errors} errors."
+    )
+    for c in summary.changes[:40]:
+        print(f"  {c['from']:8s} -> {c['to']:8s} [{', '.join(c['systems']) or '-'}] "
+              f"conf={c['confidence']:.2f}  {c['title'][:70]}")
+    return 0
+
+
 def _cmd_stats(args: argparse.Namespace) -> int:
     counts = db.counts_by_status()
     total = sum(counts.values())
@@ -196,6 +210,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_backup = sub.add_parser("backup", help="Create a timestamped database backup")
     p_backup.add_argument("--dir", default=None, help="Destination directory (default: BACKUP_DIR)")
     p_backup.set_defaults(func=_cmd_backup)
+
+    p_re = sub.add_parser("reevaluate", help="Re-run the evaluator over existing records (recover false negatives)")
+    p_re.add_argument("--status", default="Rejected", choices=["Rejected", "Pending", "all"],
+                      help="Which records to re-evaluate (never touches Verified)")
+    p_re.add_argument("--limit", "-n", type=int, default=None)
+    p_re.set_defaults(func=_cmd_reevaluate)
 
     sub.add_parser("stats", help="Show counts by status").set_defaults(func=_cmd_stats)
     return parser

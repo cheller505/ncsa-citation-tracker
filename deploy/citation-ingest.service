@@ -1,14 +1,13 @@
-# Oneshot bulk-discovery run, triggered by citation-ingest.timer.
+# Oneshot automatic discovery run, triggered by citation-ingest.timer.
 [Unit]
-Description=NCSA Citation Tracker - scheduled bulk discovery
+Description=NCSA Citation Tracker - scheduled discovery pass
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=citation
-Group=citation
-WorkingDirectory=/opt/citation-tracker
-EnvironmentFile=/opt/citation-tracker/.env
-# Runs all DISCOVERY_QUERIES across OpenAlex + Crossref, skipping tracked papers.
-ExecStart=/opt/citation-tracker/venv/bin/python -m citation_tracker.cli discover
+User=cheller
+Group=cheller
+WorkingDirectory=/home/cheller/gemini
+EnvironmentFile=/home/cheller/gemini/.env
+ExecStart=/home/cheller/gemini/venv/bin/python -m citation_tracker.cli discover
