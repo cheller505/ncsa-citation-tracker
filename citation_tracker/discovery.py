@@ -123,4 +123,9 @@ def run_discovery(
             )
             log.info("Discovery %s/%r: found=%d new=%d updated=%d", source, query, q_found, q_new, q_upd)
 
+    db.record_batch(
+        "discovery", queries=summary.queries, candidates=summary.candidates,
+        new_records=summary.new_records, updated_records=summary.updated_records,
+        skipped=summary.skipped_existing, errors=summary.errors, db_path=db_path,
+    )
     return summary

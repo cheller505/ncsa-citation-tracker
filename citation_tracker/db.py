@@ -66,6 +66,20 @@ CREATE TABLE IF NOT EXISTS search_runs (
 );
 """
 
+BATCH_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS batch_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL DEFAULT 'discovery',   -- discovery | reevaluate
+    finished_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    queries INTEGER DEFAULT 0,
+    candidates INTEGER DEFAULT 0,
+    new_records INTEGER DEFAULT 0,
+    updated_records INTEGER DEFAULT 0,
+    skipped INTEGER DEFAULT 0,
+    errors INTEGER DEFAULT 0
+);
+"""
+
 INDEX_SQL = """
 CREATE UNIQUE INDEX IF NOT EXISTS idx_citations_doi
     ON citations(doi) WHERE doi IS NOT NULL AND doi != '';
@@ -126,6 +140,7 @@ def init_db(db_path: Path | str | None = None) -> None:
     with get_conn(db_path) as conn:
         conn.executescript(TABLE_SQL)
         conn.executescript(RUNS_TABLE_SQL)
+        conn.executescript(BATCH_TABLE_SQL)
         _migrate(conn)
         _rebuild_if_constrained(conn)
         conn.executescript(INDEX_SQL)  # indexes after migration adds columns
@@ -439,6 +454,30 @@ def latest_run_per_source(db_path: Path | str | None = None) -> list[sqlite3.Row
             ORDER BY r.source
             """
         ).fetchall()
+
+
+def record_batch(kind: str, *, queries: int = 0, candidates: int = 0, new_records: int = 0,
+                 updated_records: int = 0, skipped: int = 0, errors: int = 0,
+                 db_path: Path | str | None = None) -> None:
+    """Record a completed batch (a full discovery/re-evaluation pass)."""
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """INSERT INTO batch_runs
+               (kind, queries, candidates, new_records, updated_records, skipped, errors)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (kind, queries, candidates, new_records, updated_records, skipped, errors),
+        )
+
+
+def latest_batch(kind: str | None = None, db_path: Path | str | None = None) -> sqlite3.Row | None:
+    sql = "SELECT * FROM batch_runs"
+    params: tuple = ()
+    if kind:
+        sql += " WHERE kind = ?"
+        params = (kind,)
+    sql += " ORDER BY finished_at DESC, id DESC LIMIT 1"
+    with get_conn(db_path) as conn:
+        return conn.execute(sql, params).fetchone()
 
 
 def recent_runs(limit: int = 20, db_path: Path | str | None = None) -> list[sqlite3.Row]:

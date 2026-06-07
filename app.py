@@ -37,6 +37,18 @@ c1.metric("Pending", counts.get("Pending", 0))
 c2.metric("Verified", counts.get("Verified", 0))
 c3.metric("Rejected", counts.get("Rejected", 0))
 
+_last_batch = db.latest_batch("discovery")
+if _last_batch:
+    st.caption(
+        f"🌙 **Last batch reviewed:** {_last_batch['finished_at']} UTC — "
+        f"{_last_batch['candidates']} candidates checked · {_last_batch['new_records']} new · "
+        f"{_last_batch['updated_records']} updated · {_last_batch['skipped']} already tracked"
+        + (f" · {_last_batch['errors']} errors" if _last_batch['errors'] else "")
+        + " (automated nightly run at 01:00)"
+    )
+else:
+    st.caption("🌙 No automated batch has run yet — the nightly discovery run is scheduled for 01:00.")
+
 tab_triage, tab_verified, tab_rejected, tab_stats, tab_ask, tab_about, tab_add = st.tabs(
     ["📥 Triage Queue", "✅ Verified Inventory", "📋 Rejection Log",
      "📊 Stats", "💬 Ask", "ℹ️ About", "➕ Manual Add"]
