@@ -4,7 +4,18 @@ from citation_tracker.config import get_config
 
 def test_heuristic_accepts_deltaai():
     e = pipeline._heuristic_eval("Training on DeltaAI", "ran on DeltaAI GPUs", "DeltaAI")
-    assert e.uses_system and e.system == "DeltaAI" and e.source == "heuristic"
+    assert e.uses_system and "DeltaAI" in e.systems and e.source == "heuristic"
+
+
+def test_heuristic_word_boundary_delta_not_in_deltaai():
+    # "delta" must not match inside "deltaai"
+    e = pipeline._heuristic_eval("Work on DeltaAI only", "deltaai deltaai", "")
+    assert e.systems == ["DeltaAI"]
+
+
+def test_heuristic_matches_other_systems():
+    e = pipeline._heuristic_eval("Secure analysis on NCSA Nightingale", "ran on Nightingale", "")
+    assert "Nightingale" in e.systems
 
 
 def test_heuristic_rejects_false_positive():
@@ -19,6 +30,11 @@ def test_heuristic_rejects_unrelated_delta():
     assert not e.uses_system
 
 
+def test_heuristic_rejects_florence_nightingale():
+    e = pipeline._heuristic_eval("The legacy of Florence Nightingale", "florence nightingale", "")
+    assert not e.uses_system
+
+
 def test_extract_awards(monkeypatch):
     get_config.cache_clear()
     text = "Supported by NSF award OAC 2005572 and grant 2320345."
@@ -28,7 +44,12 @@ def test_extract_awards(monkeypatch):
     get_config.cache_clear()
 
 
-def test_system_from_trigger():
-    assert pipeline._system_from_trigger("DeltaAI alert", "Unknown") == "DeltaAI"
-    assert pipeline._system_from_trigger("ncsa delta", "Unknown") == "Delta"
-    assert pipeline._system_from_trigger("transformer", "Unknown") == "Unknown"
+def test_route_status():
+    from citation_tracker.llm import Evaluation
+
+    used = Evaluation(True, ["Delta"], 0.9, "", "", "llm")
+    assert pipeline._route_status(used) == "Pending"
+    confident_no = Evaluation(False, [], 0.95, "", "", "llm")
+    assert pipeline._route_status(confident_no) == "Rejected"
+    uncertain_no = Evaluation(False, [], 0.5, "", "", "llm")
+    assert pipeline._route_status(uncertain_no) == "Pending"  # recall protection

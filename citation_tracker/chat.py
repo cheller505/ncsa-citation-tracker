@@ -11,6 +11,7 @@ from . import db
 from .config import get_config
 from .http import get_session
 from .logging_config import get_logger
+from .systems import prompt_catalog
 
 log = get_logger(__name__)
 
@@ -19,20 +20,29 @@ class ChatError(RuntimeError):
     pass
 
 
-SYSTEM_PROMPT = """You are the assistant for the NCSA Delta/DeltaAI Citation \
-Tracker. Delta (NSF OAC-2005572) and DeltaAI (NSF OAC-2320345) are NCSA \
-supercomputers. This tool tracks research papers that used them.
+def _system_prompt() -> str:
+    return f"""You are the data assistant for the NCSA / University of Illinois \
+Research Citation Tracker. This tool tracks research papers that used Illinois \
+and NCSA computing & data resources:
 
-STRICT RULES:
-- Answer ONLY using the citation records provided below in the DATA section, \
-plus general facts about what this tracker does.
-- If a question cannot be answered from the DATA (e.g. general knowledge, \
-trivia, coding help, world facts, opinions), politely refuse and say it is \
-outside the scope of this citation tracker.
-- Never invent papers, authors, awards, or statuses that are not in the DATA.
-- Be concise. When you cite a paper, use its title. You may summarize, count, \
-filter, and compare records in the DATA.
-"""
+{prompt_catalog()}
+
+Each record in the DATA section below includes its title, the system(s) it used, \
+its status (Verified / Pending / Rejected), the evaluator's reasoning (including \
+WHY a paper was rejected), award numbers, UIUC affiliation, authors, and a usage \
+snippet.
+
+HOW TO ANSWER:
+- Use ONLY the DATA section plus general facts about what this tracker does and \
+what the listed systems are.
+- You CAN and SHOULD: count, filter, group, compare, sort, and summarize the \
+records; explain why a paper was verified or rejected using its "reasoning" \
+field; list titles, authors, awards, and systems.
+- If a question is genuinely outside this data (general trivia, coding help, \
+world facts, opinions), politely decline as out of scope.
+- Never invent papers, authors, awards, or statuses not present in the DATA. If \
+the data is insufficient to answer precisely, say what is and isn't available.
+- Be concise and accurate. Cite papers by title."""
 
 
 def is_configured() -> bool:
@@ -40,21 +50,32 @@ def is_configured() -> bool:
     return cfg.chat_enabled and bool(cfg.llm_api_key)
 
 
+def _cell(row, key: str):
+    """Safe accessor (handles older rows missing newer columns)."""
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
+
+
 def _row_to_line(row, idx: int) -> str:
+    sys_val = _cell(row, "systems") or _cell(row, "system") or "Unknown"
     parts = [
         f"[{idx}] title={row['title']!r}",
-        f"system={row['system']}",
+        f"systems={sys_val}",
         f"status={row['status']}",
     ]
-    if row["award_number"]:
+    if _cell(row, "award_number"):
         parts.append(f"award={row['award_number']}")
-    parts.append(f"uiuc_affiliated={'yes' if row['uiuc_affiliated'] else 'no'}")
-    if row["uiuc_authors_depts"]:
-        authors = row["uiuc_authors_depts"].replace("\n", "; ")[:200]
+    parts.append(f"uiuc_affiliated={'yes' if _cell(row, 'uiuc_affiliated') else 'no'}")
+    if _cell(row, "uiuc_authors_depts"):
+        authors = row["uiuc_authors_depts"].replace("\n", "; ")[:160]
         parts.append(f"authors={authors}")
-    if row["usage_context"]:
-        parts.append(f"usage={row['usage_context'][:200]!r}")
-    if row["doi_or_url"]:
+    if _cell(row, "reasoning"):
+        parts.append(f"reasoning={row['reasoning'][:240]!r}")
+    if _cell(row, "usage_context"):
+        parts.append(f"usage={row['usage_context'][:160]!r}")
+    if _cell(row, "doi_or_url"):
         parts.append(f"url={row['doi_or_url']}")
     return " | ".join(parts)
 
@@ -84,7 +105,7 @@ def ask(question: str, history: list[dict] | None = None, db_path=None) -> str:
 
     data_context = build_data_context(db_path=db_path)
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": _system_prompt()},
         {"role": "system", "content": f"DATA (the only records you may use):\n{data_context}"},
     ]
     for turn in (history or [])[-6:]:  # keep recent turns for follow-ups

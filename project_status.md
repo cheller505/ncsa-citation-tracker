@@ -1,4 +1,29 @@
-# Project Status: NCSA Delta/DeltaAI Citation Tracker
+# Project Status: NCSA / Illinois Research Citation Tracker
+
+## v2.0 — multi-system expansion + integrations
+
+- [x] **Configurable systems registry** (`systems.py`): Delta, DeltaAI, Illinois
+      Campus Cluster, Nightingale, Radiant, Taiga, Granite, ICRN, Illinois
+      Computes — each with awards, aliases, scoped search queries, and
+      false-positive guards. Overridable via `SYSTEMS_FILE`.
+- [x] **DB is multi-system aware**: dropped the legacy `system` CHECK (table
+      rebuild migration), added `systems` (comma-separated) + `zotero_key`.
+- [x] **LLM eval recognizes all systems** and returns a multi-system list;
+      verified live (Delta+Taiga+Granite detected together; granite rock
+      rejected). Decisions are made by **Lumen nemotron** (confirmed).
+- [x] **Recall fix**: acknowledgement/funding full-text extraction fed to the
+      evaluator; uncertain "not used" verdicts route to Pending, not Rejected.
+- [x] **Discovery queries** derived from the registry (NCSA/Illinois-scoped).
+- [x] **Chat fixed**: root cause was the missing `reasoning` field in context;
+      now answers "why rejected", counts per system, declines off-topic.
+      Default model `gemma-4-31b-it` (qwen3.6 is unreliable on Lumen → 500s).
+- [x] **Lumen branding**: "Powered by NCSA Lumen LLM" sticker on the front page;
+      About page documents lumen.ncsa.illinois.edu and the models used.
+- [x] **Integrations**: Google Scholar Alert IMAP poller (`poll-email`), Zotero
+      sync (`zotero-sync`), Semantic Scholar API key, DB `backup` command.
+- [x] Tests: 38 passing (systems, discovery [mocked], routing, multi-system).
+
+## v1.x (earlier)
 
 ## v1.0 — RSE hardening pass (handoff-ready)
 

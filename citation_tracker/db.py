@@ -17,12 +17,15 @@ from .matching import normalize_doi
 
 log = get_logger(__name__)
 
+# Note: `system` has NO CHECK constraint — valid systems come from the
+# configurable registry (systems.py), not a hardcoded enum.
 TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS citations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL UNIQUE,
     doi TEXT,                               -- normalized bare DOI (for dedup)
-    system TEXT CHECK(system IN ('Delta', 'DeltaAI', 'Unknown')),
+    system TEXT,                            -- primary matched system (display)
+    systems TEXT,                           -- comma-separated list of all matched systems
     alert_trigger TEXT,
     status TEXT NOT NULL DEFAULT 'Pending'
         CHECK(status IN ('Pending', 'Verified', 'Rejected')),
@@ -34,10 +37,19 @@ CREATE TABLE IF NOT EXISTS citations (
     award_number TEXT,
     doi_or_url TEXT,
     source TEXT,                            -- which evaluator produced status (llm/heuristic)
+    zotero_key TEXT,                        -- Zotero item key once synced
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
+
+# Columns expected on the current schema, in canonical order (used for rebuild).
+_CANONICAL_COLUMNS = [
+    "id", "title", "doi", "system", "systems", "alert_trigger", "status",
+    "confidence", "reasoning", "usage_context", "uiuc_affiliated",
+    "uiuc_authors_depts", "award_number", "doi_or_url", "source", "zotero_key",
+    "created_at", "updated_at",
+]
 
 RUNS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS search_runs (
@@ -62,17 +74,20 @@ CREATE INDEX IF NOT EXISTS idx_runs_source ON search_runs(source);
 CREATE INDEX IF NOT EXISTS idx_runs_finished ON search_runs(finished_at);
 """
 
-# Columns that may be missing on databases created by the original schema.
+# Columns that may be missing on databases created by an earlier schema.
 _MIGRATION_COLUMNS = {
     "doi": "TEXT",
     "confidence": "REAL",
     "source": "TEXT",
     "updated_at": "TIMESTAMP",
+    "systems": "TEXT",
+    "zotero_key": "TEXT",
 }
 
 EDITABLE_FIELDS = (
     "title",
     "system",
+    "systems",
     "alert_trigger",
     "reasoning",
     "usage_context",
@@ -112,6 +127,7 @@ def init_db(db_path: Path | str | None = None) -> None:
         conn.executescript(TABLE_SQL)
         conn.executescript(RUNS_TABLE_SQL)
         _migrate(conn)
+        _rebuild_if_constrained(conn)
         conn.executescript(INDEX_SQL)  # indexes after migration adds columns
     log.info("Database ready at %s", db_path or get_config().db_path)
 
@@ -131,8 +147,38 @@ def _migrate(conn: sqlite3.Connection) -> None:
             try:
                 conn.execute("UPDATE citations SET doi = ? WHERE id = ?", (norm, row["id"]))
             except sqlite3.IntegrityError:
-                # Another row already owns this DOI; leave it for manual merge.
                 log.warning("Duplicate DOI %s during backfill (id=%s)", norm, row["id"])
+    # Backfill `systems` from the legacy singular `system` where empty.
+    conn.execute(
+        "UPDATE citations SET systems = system "
+        "WHERE (systems IS NULL OR systems = '') AND system IS NOT NULL "
+        "AND system NOT IN ('Unknown', '')"
+    )
+
+
+def _rebuild_if_constrained(conn: sqlite3.Connection) -> None:
+    """Drop the legacy CHECK(system IN (...)) constraint by rebuilding the table.
+
+    SQLite cannot ALTER away a CHECK constraint, so when an older database still
+    carries the Delta/DeltaAI/Unknown enum we copy the data into a fresh table
+    that allows any configurable system name.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='citations'"
+    ).fetchone()
+    if not row or "CHECK(system IN" not in (row["sql"] or ""):
+        return
+
+    log.info("Migrating: rebuilding citations table to drop legacy system CHECK constraint")
+    cols = ", ".join(_CANONICAL_COLUMNS)
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.executescript(
+        TABLE_SQL.replace("CREATE TABLE IF NOT EXISTS citations", "CREATE TABLE citations_new")
+    )
+    conn.execute(f"INSERT INTO citations_new ({cols}) SELECT {cols} FROM citations")
+    conn.execute("DROP TABLE citations")
+    conn.execute("ALTER TABLE citations_new RENAME TO citations")
+    conn.execute("PRAGMA foreign_keys=ON")
 
 
 def find_by_doi(conn: sqlite3.Connection, doi: str) -> sqlite3.Row | None:
@@ -171,7 +217,7 @@ def upsert_citation(data: dict[str, Any], db_path: Path | str | None = None) -> 
             return existing["id"], "updated"
 
         cols = (
-            "title", "doi", "system", "alert_trigger", "status", "confidence",
+            "title", "doi", "system", "systems", "alert_trigger", "status", "confidence",
             "reasoning", "usage_context", "uiuc_affiliated", "uiuc_authors_depts",
             "award_number", "doi_or_url", "source",
         )
@@ -203,6 +249,7 @@ def _update_from_pipeline(conn: sqlite3.Connection, existing: sqlite3.Row, data:
         UPDATE citations SET
             doi = COALESCE(?, doi),
             system = ?,
+            systems = ?,
             alert_trigger = COALESCE(?, alert_trigger),
             status = ?,
             confidence = ?,
@@ -219,6 +266,7 @@ def _update_from_pipeline(conn: sqlite3.Connection, existing: sqlite3.Row, data:
         (
             data.get("doi"),
             data.get("system", existing["system"]),
+            data.get("systems"),
             data.get("alert_trigger"),
             new_status,
             data.get("confidence"),
@@ -256,6 +304,36 @@ def update_fields(citation_id: int, fields: dict[str, Any], db_path: Path | str 
             f"UPDATE citations SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (*allowed.values(), citation_id),
         )
+
+
+def update_zotero_key(citation_id: int, zotero_key: str, db_path: Path | str | None = None) -> None:
+    with get_conn(db_path) as conn:
+        conn.execute(
+            "UPDATE citations SET zotero_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (zotero_key, citation_id),
+        )
+
+
+def backup(dest_dir: Path | str, db_path: Path | str | None = None, timestamp: str = "") -> Path:
+    """Create a consistent online backup of the database via SQLite's backup API.
+
+    ``timestamp`` should be supplied by the caller (e.g. CLI) since the value is
+    used in the filename; pass an empty string for a fixed 'latest' name.
+    """
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    name = f"citations-{timestamp}.db" if timestamp else "citations-latest.db"
+    dest = dest_dir / name
+    src = connect(db_path)
+    try:
+        out = sqlite3.connect(str(dest))
+        try:
+            src.backup(out)
+        finally:
+            out.close()
+    finally:
+        src.close()
+    return dest
 
 
 def fetch_by_status(status: str, db_path: Path | str | None = None) -> list[sqlite3.Row]:

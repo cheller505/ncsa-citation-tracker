@@ -112,6 +112,37 @@ def _cmd_serve_ingest(args: argparse.Namespace) -> int:
         time.sleep(interval_s)
 
 
+def _cmd_poll_email(args: argparse.Namespace) -> int:
+    from .email_ingest import poll
+
+    summary = poll()
+    print(
+        f"Email poll: {summary.messages} message(s), {summary.titles_found} titles, "
+        f"{summary.new_records} new, {summary.updated_records} updated, {summary.errors} errors."
+    )
+    return 0
+
+
+def _cmd_zotero_sync(args: argparse.Namespace) -> int:
+    from .zotero import sync
+
+    summary = sync()
+    print(f"Zotero sync: {summary.created} created, {summary.skipped} already synced, "
+          f"{summary.errors} errors (of {summary.candidates} verified).")
+    return 0
+
+
+def _cmd_backup(args: argparse.Namespace) -> int:
+    from datetime import datetime
+
+    cfg = get_config()
+    dest_dir = args.dir or cfg.backup_dir
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = db.backup(dest_dir, timestamp=stamp)
+    print(f"Backup written: {path}")
+    return 0
+
+
 def _cmd_stats(args: argparse.Namespace) -> int:
     counts = db.counts_by_status()
     total = sum(counts.values())
@@ -155,6 +186,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--limit", "-n", type=int, default=cfg.discovery_limit)
     p_serve.add_argument("--once", action="store_true", help="Run a single pass and exit")
     p_serve.set_defaults(func=_cmd_serve_ingest)
+
+    sub.add_parser("poll-email", help="Ingest titles from Google Scholar Alert emails (IMAP)") \
+        .set_defaults(func=_cmd_poll_email)
+
+    sub.add_parser("zotero-sync", help="Push verified citations to Zotero") \
+        .set_defaults(func=_cmd_zotero_sync)
+
+    p_backup = sub.add_parser("backup", help="Create a timestamped database backup")
+    p_backup.add_argument("--dir", default=None, help="Destination directory (default: BACKUP_DIR)")
+    p_backup.set_defaults(func=_cmd_backup)
 
     sub.add_parser("stats", help="Show counts by status").set_defaults(func=_cmd_stats)
     return parser

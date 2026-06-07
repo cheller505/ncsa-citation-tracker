@@ -5,20 +5,25 @@ Configuration comes entirely from the environment / .env (see config.py).
 """
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import streamlit as st
 
-from citation_tracker import chat, db, export, theme
+from citation_tracker import chat, db, export, systems, theme
 from citation_tracker.config import get_config
 from citation_tracker.pipeline import ingest
 
-st.set_page_config(page_title="NCSA Delta/DeltaAI Citation Tracker", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="NCSA / Illinois Citation Tracker", layout="wide", page_icon="🎓")
 
 cfg = get_config()
 db.init_db()  # ensure schema exists; safe + idempotent
 
+SYSTEM_NAMES = systems.system_names()
+
 theme.apply(st)
 theme.banner(st)
+theme.lumen_sticker(st, model=cfg.llm_model if cfg.llm_enabled else "")
 
 
 def _df(status: str) -> pd.DataFrame:
@@ -53,10 +58,9 @@ with tab_triage:
             with col1:
                 with st.form(key=f"form_{row['id']}"):
                     title = st.text_input("Title", row["title"])
-                    system = st.selectbox(
-                        "System", ["Delta", "DeltaAI", "Unknown"],
-                        index=["Delta", "DeltaAI", "Unknown"].index(row["system"] or "Unknown"),
-                    )
+                    current = [s.strip() for s in ((row["systems"] or row["system"] or "").split(","))
+                               if s.strip() and s.strip() in SYSTEM_NAMES]
+                    chosen = st.multiselect("System(s) used", SYSTEM_NAMES, default=current)
                     usage = st.text_area("Usage context", row["usage_context"] or "")
                     authors = st.text_area("Authors / affiliations", row["uiuc_authors_depts"] or "")
                     award = st.text_input("Award number", row["award_number"] or "")
@@ -64,7 +68,10 @@ with tab_triage:
                     reasoning = st.text_area("Evaluator reasoning", row["reasoning"] or "")
                     if st.form_submit_button("Save changes"):
                         db.update_fields(row["id"], {
-                            "title": title, "system": system, "usage_context": usage,
+                            "title": title,
+                            "system": chosen[0] if chosen else "Unknown",
+                            "systems": ", ".join(chosen),
+                            "usage_context": usage,
                             "uiuc_authors_depts": authors, "award_number": award,
                             "doi_or_url": doi, "reasoning": reasoning,
                             "uiuc_affiliated": 1 if authors.strip() else 0,
@@ -91,14 +98,19 @@ with tab_verified:
     if verified.empty:
         st.info("No verified citations yet.")
     else:
+        verified["systems"] = verified["systems"].fillna("").replace("", None)
+        verified["systems"] = verified["systems"].fillna(verified["system"])
         fc1, fc2 = st.columns(2)
         with fc1:
-            sys_filter = st.multiselect("Filter by system", ["Delta", "DeltaAI", "Unknown"],
-                                        default=["Delta", "DeltaAI"])
+            sys_filter = st.multiselect("Filter by system", SYSTEM_NAMES, default=SYSTEM_NAMES)
         with fc2:
             query = st.text_input("Search title / author / award", "")
 
-        view = verified[verified["system"].isin(sys_filter)]
+        if sys_filter:
+            pattern = "|".join(re.escape(s) for s in sys_filter)
+            view = verified[verified["systems"].str.contains(pattern, case=False, na=False)]
+        else:
+            view = verified
         if query:
             mask = (
                 view["title"].str.contains(query, case=False, na=False)
@@ -107,7 +119,7 @@ with tab_verified:
             )
             view = view[mask]
 
-        display_cols = ["title", "system", "award_number", "uiuc_affiliated",
+        display_cols = ["title", "systems", "award_number", "uiuc_affiliated",
                         "usage_context", "doi_or_url"]
         st.dataframe(view[display_cols], use_container_width=True)
 
@@ -190,14 +202,33 @@ with tab_ask:
 with tab_about:
     st.header("About this tracker")
     st.markdown(
-        "Tracks research papers that used the NCSA **Delta** "
-        f"(NSF {cfg.target_awards[0] if cfg.target_awards else 'OAC-2005572'}) and "
-        "**DeltaAI** "
-        f"({cfg.target_awards[1] if len(cfg.target_awards) > 1 else 'OAC-2320345'}) "
-        "supercomputers. Candidate papers are discovered automatically, evaluated "
-        f"by an LLM (**{cfg.llm_model if cfg.llm_enabled else 'heuristic (LLM disabled)'}**), "
-        "and confirmed by a human in the Triage Queue."
+        "Tracks research papers that used **NCSA and University of Illinois "
+        "computing & data resources**. Candidate papers are discovered "
+        "automatically, evaluated by an LLM, and confirmed by a human in the "
+        "Triage Queue."
     )
+
+    st.subheader("⚡ Powered by the NCSA Lumen LLM service")
+    st.markdown(
+        "Accept/reject decisions and the **Ask** assistant are powered by "
+        "**[lumen.ncsa.illinois.edu](https://lumen.ncsa.illinois.edu/)**, NCSA's "
+        "OpenAI-compatible large-language-model service hosting open models on "
+        "NCSA hardware.\n\n"
+        f"- **Evaluation model:** `{cfg.llm_model}`"
+        f"{' *(LLM disabled — using keyword heuristic)*' if not cfg.llm_enabled else ''}\n"
+        f"- **Ask assistant model:** `{cfg.chat_model}`\n\n"
+        "Every paper's accept/reject verdict, confidence score, and reasoning in "
+        "this tracker comes from that service; a transparent keyword heuristic is "
+        "used only if Lumen is unreachable."
+    )
+
+    st.subheader("Resources tracked")
+    st.markdown("\n".join(
+        f"- **{s.name}** ({s.category})"
+        + (f" — NSF {', '.join(s.awards)}" if s.awards else "")
+        + f": {s.description}"
+        for s in systems.get_systems()
+    ))
 
     st.subheader("Data sources checked")
     st.markdown(

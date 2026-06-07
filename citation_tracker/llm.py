@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from .config import get_config
 from .http import get_session
 from .logging_config import get_logger
+from .systems import all_false_positives, normalize_system_list, prompt_catalog, system_names
 
 log = get_logger(__name__)
 
@@ -27,46 +28,64 @@ class LLMError(RuntimeError):
 @dataclass
 class Evaluation:
     uses_system: bool
-    system: str          # 'Delta' | 'DeltaAI' | 'Unknown'
+    systems: list[str]   # canonical system names the paper used (may be empty)
     confidence: float    # 0..1
     usage_context: str
     reasoning: str
     source: str          # 'llm' or 'heuristic'
 
+    @property
+    def system(self) -> str:
+        """Primary system for display / back-compat."""
+        return self.systems[0] if self.systems else "Unknown"
 
-SYSTEM_PROMPT = """You are a research-software librarian for the U.S. National \
-Center for Supercomputing Applications (NCSA). Your job is to decide whether a \
-scientific paper actually USED the NCSA "Delta" or "DeltaAI" supercomputers for \
-its computations.
 
-Delta is an NCSA CPU/GPU HPC system (NSF award OAC-2005572). DeltaAI is its \
-companion AI/GPU system (NSF award OAC-2320345). A paper counts ONLY if the \
-authors ran computations on Delta or DeltaAI (e.g. acknowledgements of \
-allocation/compute time, methods describing runs on the system, or citing the \
-NSF awards in that context).
+def _build_system_prompt() -> str:
+    catalog = prompt_catalog()
+    valid = ", ".join(f'"{n}"' for n in system_names())
+    fps = "; ".join(all_false_positives())
+    return f"""You are a research-software librarian for the U.S. National Center \
+for Supercomputing Applications (NCSA) and the University of Illinois \
+Urbana-Champaign. Decide whether a scientific paper actually USED one or more of \
+these Illinois/NCSA computing & data resources for its research:
 
-Do NOT count unrelated uses of the word "delta": the SARS-CoV-2 Delta variant, \
-the Dirac/Kronecker delta function, river deltas, Delta Air Lines, finite \
-differences, etc.
+{catalog}
+
+A paper COUNTS only if the authors actually used the resource — e.g. \
+acknowledgements of an allocation or compute/storage time, a methods section \
+describing runs on the system, use of the named file system/archive/cloud, or \
+citing the relevant NSF award in that context. Merely citing another paper, or \
+sharing a word with a resource name, does NOT count.
+
+Several of these names are common words. Do NOT count unrelated uses such as: \
+{fps}. When a name like "Granite", "Taiga", "Radiant", "Nightingale", or \
+"Delta" appears, require clear evidence it refers to the NCSA/Illinois resource.
+
+A paper may use MORE THAN ONE resource (e.g. Delta + Taiga). List every resource \
+you have evidence for. Use ONLY these exact system names: {valid}.
 
 Respond with ONE JSON object and nothing else, in this exact shape:
-{
+{{
   "uses_system": true | false,
-  "system": "Delta" | "DeltaAI" | "Unknown",
+  "systems": ["<one or more of the exact names above>"],
   "confidence": 0.0-1.0,
   "usage_context": "<short quote/snippet showing the usage, or empty string>",
   "reasoning": "<one or two sentences explaining the decision>"
-}"""
+}}
+If uses_system is false, "systems" must be an empty list."""
 
 
-def _build_user_prompt(title: str, abstract: str, full_text: str, trigger: str) -> str:
+def _build_user_prompt(title: str, abstract: str, full_text: str, trigger: str,
+                       acknowledgements: str = "") -> str:
     body = abstract or full_text or "(no abstract or full text available)"
     body = body[:8000]
+    ack = f"\n\nAcknowledgements / funding text (high signal):\n{acknowledgements[:2500]}" if acknowledgements else ""
     return (
         f"Alert trigger phrase: {trigger or '(none)'}\n\n"
         f"Title: {title}\n\n"
-        f"Text (abstract or excerpt):\n{body}\n\n"
-        "Decide whether this paper used NCSA Delta or DeltaAI and return the JSON."
+        f"Text (abstract or excerpt):\n{body}{ack}\n\n"
+        "Decide whether this paper used any of the listed Illinois/NCSA resources "
+        "and return the JSON."
     )
 
 
@@ -98,7 +117,8 @@ def is_configured() -> bool:
     return cfg.llm_enabled and bool(cfg.llm_api_key)
 
 
-def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str = "") -> Evaluation:
+def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str = "",
+             acknowledgements: str = "") -> Evaluation:
     """Call the LLM; raise LLMError on failure so the caller can fall back."""
     cfg = get_config()
     if not is_configured():
@@ -107,8 +127,9 @@ def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str =
     payload = {
         "model": cfg.llm_model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": _build_user_prompt(title, abstract, full_text, trigger)},
+            {"role": "system", "content": _build_system_prompt()},
+            {"role": "user", "content": _build_user_prompt(
+                title, abstract, full_text, trigger, acknowledgements)},
         ],
         "temperature": 0,
         "max_tokens": cfg.llm_max_tokens,
@@ -144,9 +165,15 @@ def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str =
         raise LLMError(f"Could not parse JSON from LLM output: {content[:300]!r}")
 
     uses = bool(parsed.get("uses_system"))
-    system = parsed.get("system") or "Unknown"
-    if system not in ("Delta", "DeltaAI", "Unknown"):
-        system = "Unknown"
+
+    # Accept either the new "systems" list or a legacy single "system".
+    raw_systems = parsed.get("systems")
+    if not raw_systems and parsed.get("system"):
+        raw_systems = [parsed["system"]]
+    systems = normalize_system_list(raw_systems if isinstance(raw_systems, list) else [])
+    if not uses:
+        systems = []
+
     try:
         confidence = float(parsed.get("confidence", 0.0))
     except (TypeError, ValueError):
@@ -154,8 +181,8 @@ def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str =
     confidence = max(0.0, min(1.0, confidence))
 
     return Evaluation(
-        uses_system=uses,
-        system=system if uses else "Unknown",
+        uses_system=uses and bool(systems),
+        systems=systems,
         confidence=confidence,
         usage_context=str(parsed.get("usage_context", "")).strip(),
         reasoning=str(parsed.get("reasoning", "")).strip(),

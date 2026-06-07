@@ -41,6 +41,28 @@ _CSS = f"""
   [data-testid="stMetricValue"] {{ color: {ILLINI_BLUE}; }}
   /* Headers */
   h2, h3 {{ color: {ILLINI_BLUE}; }}
+
+  /* "Powered by Lumen" sticker */
+  .lumen-sticker {{
+    display: flex; align-items: center; gap: 0.7rem;
+    background: linear-gradient(100deg, {ILLINI_ORANGE} 0%, #ff8a3d 100%);
+    color: {ILLINI_BLUE};
+    border: 2px solid {ILLINI_BLUE};
+    border-radius: 999px;
+    padding: 0.5rem 1.1rem;
+    margin: 0.2rem 0 1.1rem 0;
+    font-weight: 800; font-size: 1.02rem; letter-spacing: 0.02em;
+    box-shadow: 0 3px 10px rgba(19,41,75,0.25);
+    width: fit-content;
+    animation: lumenpulse 2.6s ease-in-out infinite;
+  }}
+  .lumen-sticker .spark {{ font-size: 1.3rem; }}
+  .lumen-sticker a {{ color: {ILLINI_BLUE}; text-decoration: underline; }}
+  .lumen-sticker .small {{ font-weight: 600; font-size: 0.8rem; opacity: 0.85; }}
+  @keyframes lumenpulse {{
+    0%, 100% {{ box-shadow: 0 3px 10px rgba(19,41,75,0.25); transform: translateY(0); }}
+    50% {{ box-shadow: 0 6px 18px rgba(255,95,5,0.55); transform: translateY(-1px); }}
+  }}
 </style>
 """
 
@@ -62,3 +84,18 @@ def apply(st) -> None:
 def banner(st) -> None:
     """Render the branded header banner."""
     st.markdown(_BANNER, unsafe_allow_html=True)
+
+
+def lumen_sticker(st, model: str = "") -> None:
+    """Render the prominent 'Powered by NCSA Lumen LLM' sticker."""
+    model_note = f'<span class="small">· {model}</span>' if model else ""
+    st.markdown(
+        f"""
+        <div class="lumen-sticker">
+          <span class="spark">⚡</span>
+          <span>POWERED BY THE NCSA LUMEN LLM SERVICE</span>
+          {model_note}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )

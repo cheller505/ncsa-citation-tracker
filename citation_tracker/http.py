@@ -48,14 +48,16 @@ def get_session() -> requests.Session:
     return session
 
 
-def get_json(url: str, *, params: dict | None = None, timeout: int | None = None) -> dict | None:
+def get_json(url: str, *, params: dict | None = None, timeout: int | None = None,
+             headers: dict | None = None) -> dict | None:
     """GET a URL and return parsed JSON, or ``None`` on any failure."""
     from .logging_config import get_logger
 
     log = get_logger(__name__)
     cfg = get_config()
     try:
-        resp = get_session().get(url, params=params, timeout=timeout or cfg.http_timeout)
+        resp = get_session().get(url, params=params, headers=headers,
+                                 timeout=timeout or cfg.http_timeout)
         if resp.status_code == 200:
             return resp.json()
         log.warning("GET %s -> HTTP %s", url, resp.status_code)

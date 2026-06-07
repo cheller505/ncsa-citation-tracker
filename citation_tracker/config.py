@@ -38,6 +38,18 @@ def _get_list(name: str, default: list[str]) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _registry_queries() -> list[str]:
+    from .systems import all_search_queries
+
+    return all_search_queries()
+
+
+def _registry_awards() -> list[str]:
+    from .systems import all_awards
+
+    return all_awards()
+
+
 @dataclass(frozen=True)
 class Config:
     """Resolved runtime configuration."""
@@ -77,9 +89,34 @@ class Config:
 
     # --- Optional sources ------------------------------------------------
     enable_duckduckgo: bool
+    semantic_scholar_api_key: str
+
+    # --- Google Scholar Alert email ingestion (IMAP) --------------------
+    imap_host: str
+    imap_user: str
+    imap_password: str
+    imap_folder: str
+    imap_mark_seen: bool
+
+    # --- Zotero sync -----------------------------------------------------
+    zotero_api_key: str
+    zotero_library_id: str
+    zotero_library_type: str       # 'user' | 'group'
+    zotero_collection: str
+
+    # --- Backups ---------------------------------------------------------
+    backup_dir: str
 
     # --- Logging ---------------------------------------------------------
     log_level: str
+
+    @property
+    def imap_configured(self) -> bool:
+        return bool(self.imap_host and self.imap_user and self.imap_password)
+
+    @property
+    def zotero_configured(self) -> bool:
+        return bool(self.zotero_api_key and self.zotero_library_id)
 
     @property
     def has_contact_email(self) -> bool:
@@ -95,7 +132,7 @@ def get_config() -> Config:
     return Config(
         db_path=resolved_db,
         contact_email=os.environ.get("CONTACT_EMAIL", "").strip(),
-        target_awards=_get_list("TARGET_AWARDS", ["OAC-2005572", "OAC-2320345"]),
+        target_awards=_get_list("TARGET_AWARDS", _registry_awards()),
         institution_ror=os.environ.get("INSTITUTION_ROR", "https://ror.org/047426m28").strip(),
         institution_names=_get_list(
             "INSTITUTION_NAMES",
@@ -115,20 +152,22 @@ def get_config() -> Config:
         chat_enabled=_get_bool("CHAT_ENABLED", True),
         chat_model=os.environ.get("CHAT_MODEL", "gemma-4-31b-it").strip(),
         chat_max_rows=int(os.environ.get("CHAT_MAX_ROWS", "400")),
-        discovery_queries=_get_list(
-            "DISCOVERY_QUERIES",
-            [
-                "NCSA Delta supercomputer",
-                "DeltaAI NCSA GPU",
-                "NCSA Delta GPU cluster",
-                "OAC-2005572",
-                "OAC-2320345",
-            ],
-        ),
+        discovery_queries=_get_list("DISCOVERY_QUERIES", _registry_queries()),
         discovery_limit=int(os.environ.get("DISCOVERY_LIMIT", "12")),
         ingest_interval_hours=float(os.environ.get("INGEST_INTERVAL_HOURS", "12")),
         http_timeout=int(os.environ.get("HTTP_TIMEOUT", "20")),
         http_retries=int(os.environ.get("HTTP_RETRIES", "3")),
         enable_duckduckgo=_get_bool("ENABLE_DUCKDUCKGO", False),
+        semantic_scholar_api_key=os.environ.get("S2_API_KEY", "").strip(),
+        imap_host=os.environ.get("IMAP_HOST", "").strip(),
+        imap_user=os.environ.get("IMAP_USER", "").strip(),
+        imap_password=os.environ.get("IMAP_PASSWORD", ""),
+        imap_folder=os.environ.get("IMAP_FOLDER", "INBOX").strip(),
+        imap_mark_seen=_get_bool("IMAP_MARK_SEEN", True),
+        zotero_api_key=os.environ.get("ZOTERO_API_KEY", "").strip(),
+        zotero_library_id=os.environ.get("ZOTERO_LIBRARY_ID", "").strip(),
+        zotero_library_type=os.environ.get("ZOTERO_LIBRARY_TYPE", "user").strip(),
+        zotero_collection=os.environ.get("ZOTERO_COLLECTION", "").strip(),
+        backup_dir=os.environ.get("BACKUP_DIR", str(PROJECT_ROOT / "backups")).strip(),
         log_level=os.environ.get("LOG_LEVEL", "INFO").upper(),
     )

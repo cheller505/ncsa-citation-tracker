@@ -14,7 +14,7 @@ from . import db
 REPORT_COLUMNS = (
     "id",
     "title",
-    "system",
+    "systems",
     "award_number",
     "uiuc_affiliated",
     "uiuc_authors_depts",
@@ -57,7 +57,8 @@ def to_bibtex(status: str = "Verified", db_path=None) -> str:
             )
             if authors:
                 fields.append(f"  author = {{{authors}}}")
-        note = f"NCSA {row['system']}"
+        sys_val = (row["systems"] if "systems" in row.keys() and row["systems"] else row["system"])
+        note = f"NCSA/Illinois: {sys_val}"
         if row["award_number"]:
             note += f"; {row['award_number']}"
         fields.append(f"  note = {{{note}}}")

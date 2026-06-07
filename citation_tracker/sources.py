@@ -139,12 +139,17 @@ def search_crossref(title: str) -> dict | None:
 # Semantic Scholar                                                             #
 # --------------------------------------------------------------------------- #
 def search_semantic_scholar(title: str) -> dict | None:
+    cfg = get_config()
     fields = "title,abstract,openAccessPdf,externalIds"
     url = (
         "https://api.semanticscholar.org/graph/v1/paper/search"
         f"?query={quote(title)}&limit=5&fields={fields}"
     )
-    data = get_json(url)
+    # An API key lifts the strict unauthenticated rate limits.
+    extra_headers = {}
+    if cfg.semantic_scholar_api_key:
+        extra_headers["x-api-key"] = cfg.semantic_scholar_api_key
+    data = get_json(url, headers=extra_headers or None)
     if not data:
         return None
     for item in data.get("data", []):
