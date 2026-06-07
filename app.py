@@ -160,10 +160,33 @@ with tab_rejected:
     if not rejected:
         st.info("No rejected citations.")
     else:
-        st.caption("Rejections are kept as an audit trail. Restore any false rejection to the queue.")
-        for row in rejected:
+        st.caption("Rejections are kept as an audit trail. Use the confidence range to surface "
+                   "borderline rejections (the model was unsure) for a second look, then restore "
+                   "any false rejection to the queue.")
+        rc1, rc2 = st.columns([3, 2])
+        with rc1:
+            lo, hi = st.slider("Confidence range to show", 0.0, 1.0, value=(0.0, 1.0), step=0.05,
+                               help="Narrow to e.g. 0.0–0.85 to review rejections the model was "
+                                    "least confident about (recall safety net).")
+        with rc2:
+            show_unscored_rej = st.checkbox("Include items with no confidence score", value=True,
+                                            key="rej_unscored")
+
+        def _rej_visible(r) -> bool:
+            c = r["confidence"]
+            if c is None:
+                return show_unscored_rej
+            return lo <= c <= hi
+
+        rej_visible = [r for r in rejected if _rej_visible(r)]
+        rej_hidden = len(rejected) - len(rej_visible)
+        if rej_hidden:
+            st.caption(f"🔽 {rej_hidden} rejection(s) outside the selected confidence range.")
+        for row in rej_visible:
+            conf = row["confidence"]
+            conf_badge = f"`{conf:.2f}`" if conf is not None else "`—`"
             cols = st.columns([4, 2, 1])
-            cols[0].markdown(f"**{row['title']}**  \n_{row['reasoning'] or ''}_")
+            cols[0].markdown(f"**{row['title']}**  \nconfidence {conf_badge} · _{row['reasoning'] or ''}_")
             cols[1].write(f"trigger: {row['alert_trigger'] or '—'}")
             if cols[2].button("↩ Restore", key=f"restore_{row['id']}"):
                 db.set_status(row["id"], "Pending")
