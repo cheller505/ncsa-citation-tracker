@@ -11,8 +11,14 @@ workflow with a reproducible, deployable service.
   decides whether the paper actually *used* Delta/DeltaAI, extracts a usage
   snippet, and reports a confidence score. Falls back to a transparent keyword
   heuristic if no LLM is configured.
-- **Curation** — a Streamlit dashboard for human triage, a searchable verified
-  inventory, a non-destructive rejection audit log, and CSV/BibTeX export.
+- **Curation** — a Streamlit dashboard (NCSA/UIUC themed) for human triage, a
+  searchable verified inventory, a non-destructive rejection audit log, and
+  CSV/BibTeX export.
+- **Automatic discovery** — a scheduled job searches OpenAlex + Crossref for the
+  configured queries, skips already-tracked papers, and records every run so the
+  **About** page can show which sources were checked and when.
+- **Ask** — a scope-limited chat assistant (cheaper Lumen model, default
+  `gemma-4-31b-it`) that answers questions grounded *only* in the tracked data.
 
 ---
 
@@ -83,7 +89,14 @@ python -m citation_tracker.cli init
 # Ingest a single paper (e.g. from a Scholar alert)
 python -m citation_tracker.cli ingest "Scalable AI on the NCSA Delta GPU" -t "NCSA Delta"
 
-# Bulk discovery via Crossref
+# Run one automatic discovery pass over the configured DISCOVERY_QUERIES
+python -m citation_tracker.cli discover
+
+# Run discovery continuously on an interval (the automatic-ingest daemon)
+python -m citation_tracker.cli serve-ingest            # loops every INGEST_INTERVAL_HOURS
+python -m citation_tracker.cli serve-ingest --once     # single pass then exit
+
+# Ad-hoc bulk discovery for a single query
 python -m citation_tracker.cli bulk "NCSA Delta supercomputer" --limit 15
 
 # Export the verified inventory for an NSF report
@@ -139,6 +152,22 @@ already Verified or Rejected.
 
 If `LLM_ENABLED=false` or the endpoint is unreachable, a transparent keyword
 heuristic is used instead (low confidence, flagged `via=heuristic`).
+
+**Known limitation:** evaluation sees the title + abstract (and an open-access
+PDF when one is found). Papers whose Delta/DeltaAI usage appears *only* in an
+acknowledgements section that isn't in the abstract may be rejected. Such
+rejections are kept in the audit log and can be restored to the queue; see the
+suggestions in `project_status.md` for full-text acknowledgement parsing.
+
+## Automatic discovery & the Ask assistant
+
+- **Discovery** runs `DISCOVERY_QUERIES` against OpenAlex + Crossref. Deploy it
+  as the `serve-ingest` daemon (docker-compose `ingest` service) or the
+  `citation-ingest.timer` systemd unit. The **About** tab shows last-checked
+  times per source.
+- **Ask** is grounded only in the DB via a strict system prompt and a cheaper
+  model (`CHAT_MODEL`, default `gemma-4-31b-it`). Set `CHAT_ENABLED=false` to
+  hide it. It declines anything outside the citation data.
 
 ---
 
