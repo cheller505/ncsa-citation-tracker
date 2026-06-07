@@ -6,9 +6,15 @@ from citation_tracker.systems import get_systems, system_by_name
 
 def test_registry_has_expected_systems():
     names = {s.name for s in get_systems()}
-    for expected in ["Delta", "DeltaAI", "Nightingale", "Radiant", "Taiga",
-                     "Granite", "Illinois Campus Cluster", "ICRN", "Illinois Computes"]:
-        assert expected in names
+    assert names == {"Delta", "DeltaAI", "Illinois Campus Cluster", "ICRN", "Illinois Computes"}
+    # Removed systems must be gone (tighter scope).
+    for gone in ["Nightingale", "Radiant", "Taiga", "Granite"]:
+        assert gone not in names
+
+
+def test_every_system_has_a_color():
+    for s in get_systems():
+        assert s.color.startswith("#") and len(s.color) == 7
 
 
 def test_system_by_name_and_aliases():
@@ -19,8 +25,9 @@ def test_system_by_name_and_aliases():
 
 
 def test_normalize_system_list_canonicalizes_and_dedupes():
-    out = systems.normalize_system_list(["delta", "NCSA Delta", "Taiga", "bogus"])
-    assert out == ["Delta", "Taiga"]
+    out = systems.normalize_system_list(["delta", "NCSA Delta", "ICRN", "bogus", "Taiga"])
+    # Taiga was removed from the registry, so it drops out too.
+    assert out == ["Delta", "ICRN"]
 
 
 def test_all_awards_includes_both_nsf_awards():

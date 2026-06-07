@@ -146,7 +146,8 @@ def _cmd_backup(args: argparse.Namespace) -> int:
 def _cmd_reevaluate(args: argparse.Namespace) -> int:
     from .pipeline import reevaluate
 
-    summary = reevaluate(status=args.status, limit=args.limit)
+    match = [s.strip() for s in args.match_systems.split(",")] if args.match_systems else None
+    summary = reevaluate(status=args.status, limit=args.limit, match_systems=match)
     print(
         f"Re-evaluated {summary.checked} record(s): {summary.changed} changed, "
         f"{summary.recovered} recovered (Rejected→Pending), {summary.errors} errors."
@@ -215,6 +216,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_re.add_argument("--status", default="Rejected", choices=["Rejected", "Pending", "all"],
                       help="Which records to re-evaluate (never touches Verified)")
     p_re.add_argument("--limit", "-n", type=int, default=None)
+    p_re.add_argument("--match-systems", default=None,
+                      help="Only re-evaluate records tagged with these system names (comma-separated)")
     p_re.set_defaults(func=_cmd_reevaluate)
 
     sub.add_parser("stats", help="Show counts by status").set_defaults(func=_cmd_stats)

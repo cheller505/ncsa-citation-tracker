@@ -23,8 +23,9 @@ class System:
     key: str                       # stable lowercase id
     name: str                      # short display name (stored in DB)
     full_name: str
-    category: str                  # HPC | AI | Storage | Cloud | Secure | Notebook | Program
+    category: str                  # HPC | AI | Notebook | Program
     description: str
+    color: str = "#6c757d"         # chip color (Okabe-Ito, colorblind-safe)
     awards: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()
     search_queries: tuple[str, ...] = ()
@@ -41,6 +42,7 @@ _DEFAULT_SYSTEMS: list[System] = [
         full_name="NCSA Delta",
         category="HPC",
         description="NCSA's NSF-funded CPU/GPU HPC system (NSF OAC-2005572).",
+        color="#0072B2",   # blue
         awards=("OAC-2005572",),
         aliases=("NCSA Delta", "Delta supercomputer", "Delta GPU", "Delta cluster"),
         search_queries=("NCSA Delta supercomputer", "NCSA Delta GPU", "OAC-2005572"),
@@ -55,6 +57,7 @@ _DEFAULT_SYSTEMS: list[System] = [
         full_name="NCSA DeltaAI",
         category="AI",
         description="NCSA's NSF-funded AI/GPU companion to Delta (NSF OAC-2320345).",
+        color="#56B4E9",   # sky blue (Delta sibling)
         awards=("OAC-2320345",),
         aliases=("NCSA DeltaAI", "Delta AI", "DeltaAI supercomputer"),
         search_queries=("NCSA DeltaAI", "DeltaAI GPU NCSA", "OAC-2320345"),
@@ -69,55 +72,12 @@ _DEFAULT_SYSTEMS: list[System] = [
             "Shared investment-based HPC cluster operated jointly by the University "
             "of Illinois and NCSA."
         ),
+        color="#009E73",   # green
         aliases=("Illinois Campus Cluster", "Campus Cluster Program", "ICCP",
                  "Illinois Campus Cluster Program"),
         search_queries=("Illinois Campus Cluster Program", "Illinois Campus Cluster HPC"),
         false_positives=("galaxy cluster", "star cluster", "k-means cluster",
                           "cluster randomized", "clustering algorithm"),
-    ),
-    System(
-        key="nightingale",
-        name="Nightingale",
-        full_name="NCSA Nightingale",
-        category="Secure",
-        description=(
-            "NCSA's secure, HIPAA-aligned HPC system for sensitive/protected data."
-        ),
-        aliases=("NCSA Nightingale", "Nightingale secure", "Nightingale HPC"),
-        search_queries=("NCSA Nightingale secure computing", "NCSA Nightingale HIPAA HPC"),
-        false_positives=("Florence Nightingale", "nightingale bird", "song of the nightingale"),
-    ),
-    System(
-        key="radiant",
-        name="Radiant",
-        full_name="NCSA Radiant",
-        category="Cloud",
-        description="NCSA's private cloud (subscription VMs/compute) for Illinois researchers.",
-        aliases=("NCSA Radiant", "Radiant cloud", "Radiant private cloud"),
-        search_queries=("NCSA Radiant private cloud", "NCSA Radiant computing"),
-        false_positives=("radiant energy", "radiant heat", "radiant flux", "radiant barrier",
-                          "radiant intensity", "thermal radiant"),
-    ),
-    System(
-        key="taiga",
-        name="Taiga",
-        full_name="NCSA Taiga",
-        category="Storage",
-        description="NCSA's center-wide global file system (high-performance storage).",
-        aliases=("NCSA Taiga", "Taiga file system", "Taiga storage", "Taiga global file system"),
-        search_queries=("NCSA Taiga storage", "NCSA Taiga global file system"),
-        false_positives=("taiga biome", "boreal forest", "taiga forest", "taiga ecosystem"),
-    ),
-    System(
-        key="granite",
-        name="Granite",
-        full_name="NCSA Granite",
-        category="Storage",
-        description="NCSA's tape archive / near-line storage system (behind Taiga).",
-        aliases=("NCSA Granite", "Granite tape", "Granite archive", "Granite storage"),
-        search_queries=("NCSA Granite tape archive", "NCSA Granite storage system"),
-        false_positives=("granite rock", "granite city", "granite countertop", "granitic",
-                          "granite intrusion", "granite batholith"),
     ),
     System(
         key="icrn",
@@ -128,6 +88,7 @@ _DEFAULT_SYSTEMS: list[System] = [
             "Jupyter-based interactive computing notebooks service under the "
             "Illinois Computes program."
         ),
+        color="#CC79A7",   # purple
         aliases=("Illinois Computes Research Notebooks", "ICRN", "Research Notebooks"),
         search_queries=("Illinois Computes Research Notebooks", "ICRN Illinois Computes"),
         false_positives=(),
@@ -141,6 +102,7 @@ _DEFAULT_SYSTEMS: list[System] = [
             "University of Illinois + NCSA program providing computing, data, and AI "
             "resources and support to Illinois researchers (often free at point of use)."
         ),
+        color="#E69F00",   # amber (umbrella program)
         aliases=("Illinois Computes", "Illinois Computes program", "Illinois Computes initiative"),
         search_queries=("Illinois Computes program NCSA", "Illinois Computes initiative research"),
         false_positives=(),
@@ -155,6 +117,7 @@ def _system_from_dict(d: dict) -> System:
         full_name=d.get("full_name", d["name"]),
         category=d.get("category", "Other"),
         description=d.get("description", ""),
+        color=d.get("color", "#6c757d"),
         awards=tuple(d.get("awards", [])),
         aliases=tuple(d.get("aliases", [])),
         search_queries=tuple(d.get("search_queries", [])),
@@ -187,6 +150,11 @@ def system_by_name(name: str) -> System | None:
         if any(a.lower() == lowered for a in s.aliases):
             return s
     return None
+
+
+def color_for(name: str) -> str:
+    s = system_by_name(name)
+    return s.color if s else "#6c757d"
 
 
 def all_awards() -> list[str]:

@@ -89,6 +89,13 @@ _CSS = f"""
   @media (prefers-reduced-motion: reduce) {{
     .lumen-sticker, .lumen-sticker::before, .lumen-sticker .bolt {{ animation: none; }}
   }}
+
+  /* System chips (color-coded tags) */
+  .sys-chip {{
+    display: inline-block; padding: 0.06rem 0.55rem; margin: 0.12rem 0.2rem 0.12rem 0;
+    border-radius: 11px; font-size: 0.72rem; font-weight: 700; line-height: 1.5;
+    white-space: nowrap; border: 1px solid rgba(0,0,0,0.08);
+  }}
 </style>
 """
 
@@ -110,6 +117,31 @@ def apply(st) -> None:
 def banner(st) -> None:
     """Render the branded header banner."""
     st.markdown(_BANNER, unsafe_allow_html=True)
+
+
+def _text_on(hex_color: str) -> str:
+    """Pick black or white text for legibility on a background color."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return "#ffffff"
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    # Relative luminance (sRGB approximation).
+    lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    return "#13294B" if lum > 0.6 else "#ffffff"
+
+
+def chips_html(names) -> str:
+    """Render system names as color-coded chips (HTML span string)."""
+    from .systems import color_for
+
+    out = []
+    for n in names:
+        n = (n or "").strip()
+        if not n:
+            continue
+        bg = color_for(n)
+        out.append(f'<span class="sys-chip" style="background:{bg};color:{_text_on(bg)}">{n}</span>')
+    return "".join(out) or '<span class="sys-chip" style="background:#6c757d;color:#fff">Unknown</span>'
 
 
 def lumen_sticker(st, model: str = "") -> None:  # model kept for back-compat, unused

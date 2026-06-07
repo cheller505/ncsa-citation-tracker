@@ -213,12 +213,17 @@ class ReevalSummary:
 
 
 def reevaluate(status: str = "Rejected", limit: int | None = None,
+               match_systems: list[str] | None = None,
                db_path: Path | str | None = None) -> ReevalSummary:
     """Re-run the current evaluator over existing records and update verdicts.
 
     Recovers false negatives created before improvements (multi-system support,
     acknowledgement-text extraction). Force-updates the verdict; never touches
     Verified records (those are human-confirmed).
+
+    If ``match_systems`` is given, only records currently tagged with one of
+    those system names are re-evaluated (used after trimming the registry, to
+    reclassify papers tagged with a now-removed system).
     """
     if status == "Verified":
         raise ValueError("Refusing to re-evaluate human-Verified records.")
@@ -226,6 +231,13 @@ def reevaluate(status: str = "Rejected", limit: int | None = None,
             else db.fetch_by_status(status, db_path=db_path))
     if limit and status != "all":
         rows = rows[:limit]
+
+    if match_systems:
+        needles = [m.lower() for m in match_systems]
+        def _tagged(r) -> bool:
+            hay = f"{r['systems'] or ''} {r['system'] or ''}".lower()
+            return any(n in hay for n in needles)
+        rows = [r for r in rows if _tagged(r)]
 
     summary = ReevalSummary()
     for row in rows:

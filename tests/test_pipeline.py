@@ -14,8 +14,15 @@ def test_heuristic_word_boundary_delta_not_in_deltaai():
 
 
 def test_heuristic_matches_other_systems():
-    e = pipeline._heuristic_eval("Secure analysis on NCSA Nightingale", "ran on Nightingale", "")
-    assert "Nightingale" in e.systems
+    e = pipeline._heuristic_eval("Analysis on the Illinois Campus Cluster",
+                                 "ran on the Illinois Campus Cluster", "")
+    assert "Illinois Campus Cluster" in e.systems
+
+
+def test_heuristic_ignores_removed_systems():
+    # Taiga/Granite/Radiant/Nightingale are out of scope now.
+    e = pipeline._heuristic_eval("Storage on NCSA Taiga and Granite", "used Taiga and Granite", "")
+    assert not e.uses_system
 
 
 def test_heuristic_rejects_false_positive():
@@ -27,11 +34,6 @@ def test_heuristic_rejects_false_positive():
 
 def test_heuristic_rejects_unrelated_delta():
     e = pipeline._heuristic_eval("Dirac delta function", "the delta function", "Delta")
-    assert not e.uses_system
-
-
-def test_heuristic_rejects_florence_nightingale():
-    e = pipeline._heuristic_eval("The legacy of Florence Nightingale", "florence nightingale", "")
     assert not e.uses_system
 
 

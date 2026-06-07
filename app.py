@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -88,6 +89,9 @@ with tab_triage:
         conf = row["confidence"]
         conf_str = f" — confidence {conf:.2f}" if conf is not None else ""
         with st.expander(f"{row['title']}{conf_str}"):
+            row_systems = [s.strip() for s in ((row["systems"] or row["system"] or "").split(","))
+                           if s.strip()]
+            st.markdown(theme.chips_html(row_systems), unsafe_allow_html=True)
             col1, col2 = st.columns([2, 1])
             with col1:
                 with st.form(key=f"form_{row['id']}"):
@@ -211,6 +215,7 @@ with tab_rejected:
 # --------------------------------------------------------------------------- #
 with tab_stats:
     st.header("Citations at a glance")
+    st.markdown("**Systems:** " + theme.chips_html(SYSTEM_NAMES), unsafe_allow_html=True)
     all_rows = [dict(r) for r in db.fetch_all()]
     if not all_rows:
         st.info("No citations yet.")
@@ -240,9 +245,19 @@ with tab_stats:
             per_system = _explode_systems(verified_df).value_counts()
             per_system = per_system.reindex(SYSTEM_NAMES).dropna().astype(int)
             if not per_system.empty:
-                st.bar_chart(per_system)
-            st.dataframe(per_system.rename("verified papers").reset_index().rename(
-                columns={"index": "system"}), use_container_width=True, hide_index=True)
+                chart_df = per_system.reset_index()
+                chart_df.columns = ["system", "verified papers"]
+                colors = [systems.color_for(n) for n in chart_df["system"]]
+                chart = alt.Chart(chart_df).mark_bar().encode(
+                    x=alt.X("system:N", sort=list(chart_df["system"]), title=None),
+                    y=alt.Y("verified papers:Q"),
+                    color=alt.Color("system:N",
+                                    scale=alt.Scale(domain=list(chart_df["system"]), range=colors),
+                                    legend=None),
+                    tooltip=["system", "verified papers"],
+                )
+                st.altair_chart(chart, use_container_width=True)
+                st.dataframe(chart_df, use_container_width=True, hide_index=True)
 
         st.subheader("Verified citations per NSF award")
         award_rows = verified_df[verified_df["award_number"].fillna("") != ""]
