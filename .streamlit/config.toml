@@ -1,0 +1,11 @@
+# NCSA / University of Illinois Urbana-Champaign brand theme.
+# Illini Blue #13294B, Illini Orange #FF5F05.
+[theme]
+primaryColor = "#FF5F05"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#EEF1F6"
+textColor = "#13294B"
+font = "sans serif"
+
+[server]
+headless = true

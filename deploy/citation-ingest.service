@@ -10,5 +10,5 @@ User=citation
 Group=citation
 WorkingDirectory=/opt/citation-tracker
 EnvironmentFile=/opt/citation-tracker/.env
-ExecStart=/opt/citation-tracker/venv/bin/python -m citation_tracker.cli bulk "NCSA Delta supercomputer" --limit 15
-ExecStart=/opt/citation-tracker/venv/bin/python -m citation_tracker.cli bulk "DeltaAI NCSA" --limit 15
+# Runs all DISCOVERY_QUERIES across OpenAlex + Crossref, skipping tracked papers.
+ExecStart=/opt/citation-tracker/venv/bin/python -m citation_tracker.cli discover

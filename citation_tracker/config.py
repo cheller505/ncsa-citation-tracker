@@ -61,6 +61,16 @@ class Config:
     llm_timeout: int
     llm_max_tokens: int
 
+    # --- Chat assistant backend (cheaper model, scoped to project data) --
+    chat_enabled: bool
+    chat_model: str
+    chat_max_rows: int
+
+    # --- Automatic discovery ---------------------------------------------
+    discovery_queries: list[str]
+    discovery_limit: int
+    ingest_interval_hours: float
+
     # --- HTTP behaviour --------------------------------------------------
     http_timeout: int
     http_retries: int
@@ -102,6 +112,21 @@ def get_config() -> Config:
         llm_api_key=os.environ.get("LLM_API_KEY", "").strip(),
         llm_timeout=int(os.environ.get("LLM_TIMEOUT", "120")),
         llm_max_tokens=int(os.environ.get("LLM_MAX_TOKENS", "4000")),
+        chat_enabled=_get_bool("CHAT_ENABLED", True),
+        chat_model=os.environ.get("CHAT_MODEL", "gemma-4-31b-it").strip(),
+        chat_max_rows=int(os.environ.get("CHAT_MAX_ROWS", "400")),
+        discovery_queries=_get_list(
+            "DISCOVERY_QUERIES",
+            [
+                "NCSA Delta supercomputer",
+                "DeltaAI NCSA GPU",
+                "NCSA Delta GPU cluster",
+                "OAC-2005572",
+                "OAC-2320345",
+            ],
+        ),
+        discovery_limit=int(os.environ.get("DISCOVERY_LIMIT", "12")),
+        ingest_interval_hours=float(os.environ.get("INGEST_INTERVAL_HOURS", "12")),
         http_timeout=int(os.environ.get("HTTP_TIMEOUT", "20")),
         http_retries=int(os.environ.get("HTTP_RETRIES", "3")),
         enable_duckduckgo=_get_bool("ENABLE_DUCKDUCKGO", False),

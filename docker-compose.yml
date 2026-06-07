@@ -22,14 +22,9 @@ services:
       CITATION_DB_PATH: /data/citations.db
     volumes:
       - citation-data:/data
-    entrypoint: ["sh", "-c"]
-    command:
-      - >
-        while true; do
-          python -m citation_tracker.cli bulk "NCSA Delta supercomputer" --limit 15;
-          python -m citation_tracker.cli bulk "DeltaAI NCSA" --limit 15;
-          sleep 86400;
-        done
+    # Runs all DISCOVERY_QUERIES across OpenAlex + Crossref on a repeating
+    # interval (INGEST_INTERVAL_HOURS), skipping already-tracked papers.
+    command: ["python", "-m", "citation_tracker.cli", "serve-ingest"]
     restart: unless-stopped
     depends_on:
       - web

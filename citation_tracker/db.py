@@ -39,10 +39,27 @@ CREATE TABLE IF NOT EXISTS citations (
 );
 """
 
+RUNS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS search_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,                    -- e.g. 'openalex', 'crossref'
+    query TEXT NOT NULL,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP,
+    candidates_found INTEGER DEFAULT 0,
+    new_records INTEGER DEFAULT 0,
+    updated_records INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'running',  -- running | ok | error
+    error TEXT
+);
+"""
+
 INDEX_SQL = """
 CREATE UNIQUE INDEX IF NOT EXISTS idx_citations_doi
     ON citations(doi) WHERE doi IS NOT NULL AND doi != '';
 CREATE INDEX IF NOT EXISTS idx_citations_status ON citations(status);
+CREATE INDEX IF NOT EXISTS idx_runs_source ON search_runs(source);
+CREATE INDEX IF NOT EXISTS idx_runs_finished ON search_runs(finished_at);
 """
 
 # Columns that may be missing on databases created by the original schema.
@@ -93,6 +110,7 @@ def init_db(db_path: Path | str | None = None) -> None:
     """Create the schema and apply migrations. Idempotent."""
     with get_conn(db_path) as conn:
         conn.executescript(TABLE_SQL)
+        conn.executescript(RUNS_TABLE_SQL)
         _migrate(conn)
         conn.executescript(INDEX_SQL)  # indexes after migration adds columns
     log.info("Database ready at %s", db_path or get_config().db_path)
@@ -251,3 +269,79 @@ def counts_by_status(db_path: Path | str | None = None) -> dict[str, int]:
     with get_conn(db_path) as conn:
         rows = conn.execute("SELECT status, COUNT(*) AS n FROM citations GROUP BY status").fetchall()
     return {row["status"]: row["n"] for row in rows}
+
+
+def fetch_all(db_path: Path | str | None = None, limit: int | None = None) -> list[sqlite3.Row]:
+    sql = "SELECT * FROM citations ORDER BY updated_at DESC, id DESC"
+    if limit:
+        sql += f" LIMIT {int(limit)}"
+    with get_conn(db_path) as conn:
+        return conn.execute(sql).fetchall()
+
+
+def exists_similar(title: str, threshold: float = 0.82, db_path: Path | str | None = None) -> bool:
+    """True if a record with a closely matching title already exists.
+
+    Used by automatic discovery to avoid re-evaluating (and re-paying for) papers
+    that are already tracked.
+    """
+    with get_conn(db_path) as conn:
+        return find_similar_title(conn, title, threshold) is not None
+
+
+# --------------------------------------------------------------------------- #
+# Search-run tracking (powers the About page's "last checked" view)           #
+# --------------------------------------------------------------------------- #
+def start_run(source: str, query: str, db_path: Path | str | None = None) -> int:
+    with get_conn(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO search_runs (source, query, status) VALUES (?, ?, 'running')",
+            (source, query),
+        )
+        return cur.lastrowid
+
+
+def finish_run(
+    run_id: int,
+    *,
+    candidates_found: int = 0,
+    new_records: int = 0,
+    updated_records: int = 0,
+    status: str = "ok",
+    error: str | None = None,
+    db_path: Path | str | None = None,
+) -> None:
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE search_runs SET
+                finished_at = CURRENT_TIMESTAMP,
+                candidates_found = ?, new_records = ?, updated_records = ?,
+                status = ?, error = ?
+            WHERE id = ?
+            """,
+            (candidates_found, new_records, updated_records, status, error, run_id),
+        )
+
+
+def latest_run_per_source(db_path: Path | str | None = None) -> list[sqlite3.Row]:
+    """Most recent finished run for each source (for the About page)."""
+    with get_conn(db_path) as conn:
+        return conn.execute(
+            """
+            SELECT r.* FROM search_runs r
+            JOIN (
+                SELECT source, MAX(COALESCE(finished_at, started_at)) AS latest
+                FROM search_runs GROUP BY source
+            ) m ON r.source = m.source
+               AND COALESCE(r.finished_at, r.started_at) = m.latest
+            ORDER BY r.source
+            """
+        ).fetchall()
+
+
+def recent_runs(limit: int = 20, db_path: Path | str | None = None) -> list[sqlite3.Row]:
+    with get_conn(db_path) as conn:
+        return conn.execute(
+            "SELECT * FROM search_runs ORDER BY started_at DESC LIMIT ?", (int(limit),)
+        ).fetchall()

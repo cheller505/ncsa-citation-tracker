@@ -78,6 +78,40 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_discover(args: argparse.Namespace) -> int:
+    from .discovery import run_discovery
+
+    summary = run_discovery(limit=args.limit)
+    print(
+        f"Discovery complete: {summary.queries} queries, {summary.candidates} candidates, "
+        f"{summary.new_records} new, {summary.updated_records} updated, "
+        f"{summary.skipped_existing} skipped (already tracked), {summary.errors} errors."
+    )
+    return 0
+
+
+def _cmd_serve_ingest(args: argparse.Namespace) -> int:
+    """Run discovery on a fixed interval (a simple long-running daemon)."""
+    from .discovery import run_discovery
+
+    interval_s = max(60.0, args.interval_hours * 3600.0)
+    log.info("Starting ingest loop: every %.1f h", args.interval_hours)
+    while True:
+        try:
+            summary = run_discovery(limit=args.limit)
+            log.info(
+                "Pass done: %d new, %d updated, %d skipped, %d errors.",
+                summary.new_records, summary.updated_records,
+                summary.skipped_existing, summary.errors,
+            )
+        except Exception as exc:  # noqa: BLE001 - never let the daemon die
+            log.error("Discovery pass failed: %s", exc)
+        if args.once:
+            return 0
+        log.info("Sleeping %.1f h until next pass.", interval_s / 3600.0)
+        time.sleep(interval_s)
+
+
 def _cmd_stats(args: argparse.Namespace) -> int:
     counts = db.counts_by_status()
     total = sum(counts.values())
@@ -109,6 +143,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--format", "-f", default="csv", choices=["csv", "bibtex"])
     p_exp.add_argument("--output", "-o", default=None)
     p_exp.set_defaults(func=_cmd_export)
+
+    cfg = get_config()
+    p_disc = sub.add_parser("discover", help="Run one automatic discovery pass over configured queries")
+    p_disc.add_argument("--limit", "-n", type=int, default=cfg.discovery_limit,
+                        help="Max candidates per source per query")
+    p_disc.set_defaults(func=_cmd_discover)
+
+    p_serve = sub.add_parser("serve-ingest", help="Run discovery on a repeating interval (daemon)")
+    p_serve.add_argument("--interval-hours", type=float, default=cfg.ingest_interval_hours)
+    p_serve.add_argument("--limit", "-n", type=int, default=cfg.discovery_limit)
+    p_serve.add_argument("--once", action="store_true", help="Run a single pass and exit")
+    p_serve.set_defaults(func=_cmd_serve_ingest)
 
     sub.add_parser("stats", help="Show counts by status").set_defaults(func=_cmd_stats)
     return parser
