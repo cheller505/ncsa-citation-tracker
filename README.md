@@ -141,13 +141,19 @@ volume.
 
 ### HTTPS (Caddy reverse proxy)
 
-`deploy/Caddyfile` proxies `https://warspite.ncsa.illinois.edu` → the local
-Streamlit app, auto-provisioning a free Let's Encrypt certificate and handling
-Streamlit's websocket. Requires the domain to resolve publicly (it does) and
-ports 80/443 reachable from the internet for the ACME challenge.
+`deploy/Caddyfile` serves `https://warspite.ncsa.illinois.edu:8501` and proxies
+to the local Streamlit app (private on `localhost:8601`), handling Streamlit's
+websocket. It uses a free Let's Encrypt certificate and serves on **port 8501**
+(not 80/443).
+
+> Cert note: the LE cert was originally obtained while Caddy briefly ran on
+> 80/443 (ACME challenges only happen on those ports). Serving on 8501 reuses
+> that cached cert. Because we're off 80/443, Caddy can't auto-renew — before
+> the cert expires (~90 days) either re-run Caddy on 80/443 once to renew, or
+> switch to a DNS-01 ACME challenge (needs DNS API credentials).
 
 ```bash
-# Quick start (needs root to bind 80/443):
+# Quick start:
 sudo /usr/local/bin/caddy start --config deploy/Caddyfile
 
 # Or as a durable systemd service (dedicated config path — this host's

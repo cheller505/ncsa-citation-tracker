@@ -17,17 +17,20 @@
 # Stop:
 #   sudo /usr/local/bin/caddy stop
 
-warspite.ncsa.illinois.edu {
-	encode zstd gzip
-	reverse_proxy 127.0.0.1:8501
+# Serve HTTPS on 8443 (not 80/443). Reuses the Let's Encrypt cert already
+# obtained for this domain. NOTE: because ACME challenges happen on 80/443,
+# auto-renewal won't run while we're off those ports — the current cert is
+# valid ~90 days; see README for the renewal options.
+{
+	http_port 8080
+	https_port 8501
+	auto_https disable_redirects
 }
 
-# --- Fallback if ports 80/443 can't reach the public internet for ACME ---
-# Comment out the block above and uncomment this to serve HTTPS with a
-# self-signed cert (browsers will warn) on port 8443 instead:
-#
-# https://warspite.ncsa.illinois.edu:8443 {
-# 	tls internal
-# 	encode zstd gzip
-# 	reverse_proxy 127.0.0.1:8501
-# }
+# Public HTTPS on :8501 (a port confirmed reachable from the internet here).
+# Streamlit runs privately on localhost:8601; Caddy terminates TLS using the
+# Let's Encrypt cert already obtained for this domain.
+warspite.ncsa.illinois.edu {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8601
+}
