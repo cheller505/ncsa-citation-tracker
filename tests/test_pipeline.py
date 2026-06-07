@@ -47,9 +47,9 @@ def test_extract_awards(monkeypatch):
 def test_route_status():
     from citation_tracker.llm import Evaluation
 
-    used = Evaluation(True, ["Delta"], 0.9, "", "", "llm")
-    assert pipeline._route_status(used) == "Pending"
-    confident_no = Evaluation(False, [], 0.95, "", "", "llm")
-    assert pipeline._route_status(confident_no) == "Rejected"
-    uncertain_no = Evaluation(False, [], 0.5, "", "", "llm")
-    assert pipeline._route_status(uncertain_no) == "Pending"  # recall protection
+    # Finds (any confidence) go to the review queue; non-finds are rejected.
+    assert pipeline._route_status(Evaluation(True, ["Delta"], 0.95, "", "", "llm")) == "Pending"
+    assert pipeline._route_status(Evaluation(True, ["Delta"], 0.5, "", "", "llm")) == "Pending"
+    # Confidence does NOT force a review: low-confidence non-finds are rejected.
+    assert pipeline._route_status(Evaluation(False, [], 0.95, "", "", "llm")) == "Rejected"
+    assert pipeline._route_status(Evaluation(False, [], 0.5, "", "", "llm")) == "Rejected"

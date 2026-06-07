@@ -48,9 +48,31 @@ tab_triage, tab_verified, tab_rejected, tab_ask, tab_about, tab_add = st.tabs(
 with tab_triage:
     st.header("Pending triage")
     pending = db.fetch_by_status("Pending")
-    if not pending:
-        st.info("No pending citations to triage. 🎉")
-    for row in pending:
+
+    # Confidence filter — default view shows only confident finds (>= 0.9).
+    fcol1, fcol2 = st.columns([3, 2])
+    with fcol1:
+        min_conf = st.slider(
+            "Minimum confidence to show", 0.0, 1.0, value=0.9, step=0.05,
+            help="Confirmed finds are ≥ 0.90. Lower this to review less-certain "
+                 "candidates; they are not flagged for review automatically.",
+        )
+    with fcol2:
+        show_unscored = st.checkbox("Also show items with no confidence score", value=True)
+
+    def _visible(r) -> bool:
+        c = r["confidence"]
+        if c is None:
+            return show_unscored
+        return c >= min_conf
+
+    visible = [r for r in pending if _visible(r)]
+    hidden = len(pending) - len(visible)
+    if hidden:
+        st.caption(f"🔽 {hidden} lower-confidence item(s) hidden — lower the threshold to review them.")
+    if not visible:
+        st.info("No pending citations at this confidence threshold. 🎉")
+    for row in visible:
         conf = row["confidence"]
         conf_str = f" — confidence {conf:.2f}" if conf is not None else ""
         with st.expander(f"{row['title']}{conf_str}"):

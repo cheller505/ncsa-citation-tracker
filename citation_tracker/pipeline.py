@@ -28,9 +28,9 @@ from .sources import (
 
 log = get_logger(__name__)
 
-# Below this confidence, a "not used" verdict is treated as uncertain and sent
-# to Pending (human review) instead of Rejected — protects recall.
-REVIEW_CONFIDENCE = 0.85
+# Confidence at/above which a find is treated as a confident, "confirmed" hit.
+# Used by the dashboard's default triage filter (not by status routing).
+CONFIRM_CONFIDENCE = 0.9
 
 
 @dataclass
@@ -123,12 +123,15 @@ def _extract_awards(text: str) -> str:
 
 
 def _route_status(evaluation: Evaluation) -> str:
-    """Decide the initial status, protecting recall on uncertain rejections."""
-    if evaluation.uses_system:
-        return "Pending"  # used -> always human-verified
-    if evaluation.confidence < REVIEW_CONFIDENCE:
-        return "Pending"  # uncertain "no" -> human review, not auto-reject
-    return "Rejected"
+    """Decide the initial status.
+
+    Only positive finds (uses_system) enter the review queue (Pending);
+    everything else is Rejected. Confidence does NOT force a review — a
+    low-confidence "not used" verdict is rejected rather than auto-queued, and a
+    low-confidence find is still Pending but hidden by the dashboard's default
+    confidence filter (>= CONFIRM_CONFIDENCE).
+    """
+    return "Pending" if evaluation.uses_system else "Rejected"
 
 
 def ingest(title: str, trigger: str = "", db_path: Path | str | None = None) -> IngestResult:
