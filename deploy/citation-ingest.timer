@@ -1,0 +1,12 @@
+# Runs the bulk-discovery service daily.
+# Install alongside citation-ingest.service, then:
+#   sudo systemctl enable --now citation-ingest.timer
+[Unit]
+Description=Daily NCSA citation bulk discovery
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

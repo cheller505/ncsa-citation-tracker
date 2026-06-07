@@ -1,0 +1,13 @@
+# Runtime dependencies for the NCSA Delta/DeltaAI Citation Tracker.
+# Floor-pinned for portability across VMs. For an exact, reproducible
+# environment run:  pip freeze > requirements.lock
+streamlit>=1.40
+pandas>=2.0
+requests>=2.31
+urllib3>=2.0
+pypdf>=4.0
+python-dotenv>=1.0
+
+# Optional fallback PDF-by-web-search source (disabled by default via
+# ENABLE_DUCKDUCKGO; the package is notoriously rate-limited/unstable).
+# ddgs>=6.0

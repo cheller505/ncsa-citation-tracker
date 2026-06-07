@@ -1,0 +1,38 @@
+services:
+  web:
+    build: .
+    image: ncsa-citation-tracker:latest
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      CITATION_DB_PATH: /data/citations.db
+    volumes:
+      - citation-data:/data
+    restart: unless-stopped
+
+  # Scheduled bulk discovery. Runs the default Delta/DeltaAI queries, then
+  # sleeps a day. Disable by removing this service or scaling it to 0.
+  ingest:
+    image: ncsa-citation-tracker:latest
+    env_file:
+      - .env
+    environment:
+      CITATION_DB_PATH: /data/citations.db
+    volumes:
+      - citation-data:/data
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        while true; do
+          python -m citation_tracker.cli bulk "NCSA Delta supercomputer" --limit 15;
+          python -m citation_tracker.cli bulk "DeltaAI NCSA" --limit 15;
+          sleep 86400;
+        done
+    restart: unless-stopped
+    depends_on:
+      - web
+
+volumes:
+  citation-data:

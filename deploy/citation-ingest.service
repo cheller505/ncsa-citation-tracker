@@ -1,0 +1,14 @@
+# Oneshot bulk-discovery run, triggered by citation-ingest.timer.
+[Unit]
+Description=NCSA Citation Tracker - scheduled bulk discovery
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=citation
+Group=citation
+WorkingDirectory=/opt/citation-tracker
+EnvironmentFile=/opt/citation-tracker/.env
+ExecStart=/opt/citation-tracker/venv/bin/python -m citation_tracker.cli bulk "NCSA Delta supercomputer" --limit 15
+ExecStart=/opt/citation-tracker/venv/bin/python -m citation_tracker.cli bulk "DeltaAI NCSA" --limit 15
