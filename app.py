@@ -14,7 +14,7 @@ from citation_tracker import chat, db, export, systems, theme
 from citation_tracker.config import get_config
 from citation_tracker.pipeline import ingest
 
-st.set_page_config(page_title="NCSA / Illinois Citation Tracker", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="NCSA Research Computing Citation Tracker", layout="wide", page_icon="🎓")
 
 cfg = get_config()
 db.init_db()  # ensure schema exists; safe + idempotent
@@ -23,7 +23,7 @@ SYSTEM_NAMES = systems.system_names()
 
 theme.apply(st)
 theme.banner(st)
-theme.lumen_sticker(st, model=cfg.llm_model if cfg.llm_enabled else "")
+theme.lumen_sticker(st)
 
 
 def _df(status: str) -> pd.DataFrame:

@@ -9,3 +9,9 @@ font = "sans serif"
 
 [server]
 headless = true
+address = "0.0.0.0"
+port = 8501
+# Public, no-auth access: don't block external browsers on origin/XSRF checks.
+enableCORS = false
+enableXsrfProtection = false
+enableWebsocketCompression = false

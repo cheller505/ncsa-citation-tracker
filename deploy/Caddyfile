@@ -1,0 +1,33 @@
+# Caddy reverse proxy → HTTPS for the Citation Tracker.
+#
+# Caddy automatically obtains and renews a free Let's Encrypt certificate for
+# the domain below and proxies to the local Streamlit app (including the
+# websocket Streamlit needs). It also redirects http→https.
+#
+# Requirements:
+#   - The domain must resolve publicly to this host (warspite.ncsa.illinois.edu
+#     already resolves to 141.142.31.5).
+#   - Ports 80 and 443 must be reachable from the internet (for the ACME
+#     challenge and for serving). Port 8501 is already open; confirm 80/443.
+#
+# Start it (needs root to bind 80/443):
+#   sudo /usr/local/bin/caddy start --config /home/cheller/gemini/deploy/Caddyfile
+# Reload after edits:
+#   sudo /usr/local/bin/caddy reload --config /home/cheller/gemini/deploy/Caddyfile
+# Stop:
+#   sudo /usr/local/bin/caddy stop
+
+warspite.ncsa.illinois.edu {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8501
+}
+
+# --- Fallback if ports 80/443 can't reach the public internet for ACME ---
+# Comment out the block above and uncomment this to serve HTTPS with a
+# self-signed cert (browsers will warn) on port 8443 instead:
+#
+# https://warspite.ncsa.illinois.edu:8443 {
+# 	tls internal
+# 	encode zstd gzip
+# 	reverse_proxy 127.0.0.1:8501
+# }

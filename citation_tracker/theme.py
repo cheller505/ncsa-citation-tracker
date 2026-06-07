@@ -42,26 +42,52 @@ _CSS = f"""
   /* Headers */
   h2, h3 {{ color: {ILLINI_BLUE}; }}
 
-  /* "Powered by Lumen" sticker */
+  /* ---- "Powered by NCSA Lumen" radiant sticker ---- */
+  .lumen-wrap {{ padding: 0.15rem 0 1.25rem 0; }}
   .lumen-sticker {{
-    display: flex; align-items: center; gap: 0.7rem;
-    background: linear-gradient(100deg, {ILLINI_ORANGE} 0%, #ff8a3d 100%);
-    color: {ILLINI_BLUE};
-    border: 2px solid {ILLINI_BLUE};
+    position: relative;
+    display: inline-flex; align-items: center; gap: 0.65rem;
+    padding: 0.62rem 1.55rem;
     border-radius: 999px;
-    padding: 0.5rem 1.1rem;
-    margin: 0.2rem 0 1.1rem 0;
-    font-weight: 800; font-size: 1.02rem; letter-spacing: 0.02em;
-    box-shadow: 0 3px 10px rgba(19,41,75,0.25);
-    width: fit-content;
-    animation: lumenpulse 2.6s ease-in-out infinite;
+    font-weight: 900; font-size: 1.06rem; letter-spacing: 0.07em;
+    color: #2b1400;
+    background: linear-gradient(100deg, #ff5f05, #ffae42, #ffe39e, #ffae42, #ff5f05);
+    background-size: 280% 100%;
+    border: 1.5px solid rgba(255,255,255,0.55);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.45);
+    overflow: hidden;
+    animation: lumen-flow 6s ease infinite, lumen-halo 3s ease-in-out infinite;
   }}
-  .lumen-sticker .spark {{ font-size: 1.3rem; }}
-  .lumen-sticker a {{ color: {ILLINI_BLUE}; text-decoration: underline; }}
-  .lumen-sticker .small {{ font-weight: 600; font-size: 0.8rem; opacity: 0.85; }}
-  @keyframes lumenpulse {{
-    0%, 100% {{ box-shadow: 0 3px 10px rgba(19,41,75,0.25); transform: translateY(0); }}
-    50% {{ box-shadow: 0 6px 18px rgba(255,95,5,0.55); transform: translateY(-1px); }}
+  /* sweeping light shine across the pill */
+  .lumen-sticker::before {{
+    content: ""; position: absolute; top: 0; left: -65%;
+    width: 55%; height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.9), transparent);
+    transform: skewX(-20deg);
+    animation: lumen-shine 3.6s ease-in-out infinite;
+  }}
+  .lumen-sticker .txt {{ position: relative; z-index: 1; }}
+  .lumen-sticker .bolt {{
+    position: relative; z-index: 1; font-size: 1.3rem;
+    filter: drop-shadow(0 0 6px rgba(255,255,255,0.95));
+    animation: lumen-spark 1.7s ease-in-out infinite;
+  }}
+  @keyframes lumen-flow {{
+    0% {{ background-position: 0% 50%; }}
+    50% {{ background-position: 100% 50%; }}
+    100% {{ background-position: 0% 50%; }}
+  }}
+  @keyframes lumen-halo {{
+    0%, 100% {{ box-shadow: 0 0 0 2px rgba(255,255,255,0.4) inset,
+                            0 0 16px rgba(255,138,61,0.7), 0 0 30px rgba(255,95,5,0.45); }}
+    50% {{ box-shadow: 0 0 0 2px rgba(255,255,255,0.6) inset,
+                       0 0 30px rgba(255,176,77,0.95), 0 0 64px rgba(255,95,5,0.72); }}
+  }}
+  @keyframes lumen-shine {{ 0% {{ left: -65%; }} 60% {{ left: 135%; }} 100% {{ left: 135%; }} }}
+  @keyframes lumen-spark {{ 0%, 100% {{ transform: scale(1); opacity: 1; }}
+                            50% {{ transform: scale(1.28); opacity: 0.85; }} }}
+  @media (prefers-reduced-motion: reduce) {{
+    .lumen-sticker, .lumen-sticker::before, .lumen-sticker .bolt {{ animation: none; }}
   }}
 </style>
 """
@@ -69,9 +95,9 @@ _CSS = f"""
 _BANNER = """
 <div class="ncsa-banner">
   <span class="badge">NCSA</span><span class="badge">ILLINOIS</span>
-  <h1>Delta / DeltaAI Citation Tracker</h1>
-  <div class="sub">National Center for Supercomputing Applications &middot;
-  University of Illinois Urbana-Champaign</div>
+  <h1>NCSA Research Computing Citation Tracker</h1>
+  <div class="sub">Citations of NCSA &amp; University of Illinois research computing
+  &amp; data resources</div>
 </div>
 """
 
@@ -86,15 +112,16 @@ def banner(st) -> None:
     st.markdown(_BANNER, unsafe_allow_html=True)
 
 
-def lumen_sticker(st, model: str = "") -> None:
-    """Render the prominent 'Powered by NCSA Lumen LLM' sticker."""
-    model_note = f'<span class="small">· {model}</span>' if model else ""
+def lumen_sticker(st, model: str = "") -> None:  # model kept for back-compat, unused
+    """Render the prominent, radiant 'Powered by NCSA Lumen' sticker."""
     st.markdown(
-        f"""
-        <div class="lumen-sticker">
-          <span class="spark">⚡</span>
-          <span>POWERED BY THE NCSA LUMEN LLM SERVICE</span>
-          {model_note}
+        """
+        <div class="lumen-wrap">
+          <div class="lumen-sticker">
+            <span class="bolt">⚡</span>
+            <span class="txt">POWERED BY THE NCSA LUMEN LLM SERVICE</span>
+            <span class="bolt">✨</span>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,

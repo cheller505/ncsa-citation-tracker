@@ -1,9 +1,13 @@
-# NCSA Delta / DeltaAI Citation Tracker
+# NCSA Research Computing Citation Tracker
 
 A small, self-contained pipeline + web dashboard for discovering, evaluating,
-and curating research papers that used the NCSA **Delta** and **DeltaAI**
-supercomputers. It replaces the legacy Google-Scholar-Alert-to-spreadsheet
-workflow with a reproducible, deployable service.
+and curating research papers that used NCSA and University of Illinois research
+computing & data resources — **Delta**, **DeltaAI**, the **Illinois Campus
+Cluster**, **Nightingale**, **Radiant**, **Taiga**, **Granite**, **ICRN**, and
+the **Illinois Computes** program (all configurable in
+`citation_tracker/systems.py`). It replaces the legacy
+Google-Scholar-Alert-to-spreadsheet workflow with a reproducible, deployable
+service.
 
 - **Discovery** — resolve a paper title to structured metadata (OpenAlex first,
   then Crossref / Semantic Scholar / arXiv / Unpaywall).
@@ -135,8 +139,25 @@ volume.
    sudo systemctl enable --now citation-ingest.timer   # daily discovery
    ```
 
-Put the dashboard behind a reverse proxy (nginx/Caddy) with TLS + auth for
-anything beyond localhost.
+### HTTPS (Caddy reverse proxy)
+
+`deploy/Caddyfile` proxies `https://warspite.ncsa.illinois.edu` → the local
+Streamlit app, auto-provisioning a free Let's Encrypt certificate and handling
+Streamlit's websocket. Requires the domain to resolve publicly (it does) and
+ports 80/443 reachable from the internet for the ACME challenge.
+
+```bash
+# Quick start (needs root to bind 80/443):
+sudo /usr/local/bin/caddy start --config deploy/Caddyfile
+
+# Or as a durable systemd service:
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+sudo cp deploy/citation-tracker-caddy.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now citation-tracker-caddy
+```
+
+If ports 80/443 aren't open to the public internet, use the `tls internal`
+fallback block in the `Caddyfile` (self-signed, on port 8443).
 
 ---
 
