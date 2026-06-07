@@ -1,6 +1,11 @@
 # systemd unit for the Caddy TLS reverse proxy (durable HTTPS).
+#
+# NOTE: this host already runs a separate production Caddy for the Boneyard
+# portal at /etc/caddy/Caddyfile (port 8247). Do NOT overwrite that file. This
+# unit uses its own dedicated config + ports (80/443), so the two coexist.
+#
 # Install:
-#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo cp deploy/Caddyfile /etc/caddy/citation-tracker.Caddyfile
 #   sudo cp deploy/citation-tracker-caddy.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now citation-tracker-caddy
@@ -11,8 +16,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile
-ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --force
+ExecStart=/usr/local/bin/caddy run --config /etc/caddy/citation-tracker.Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/citation-tracker.Caddyfile --force
 Restart=on-failure
 RestartSec=5
 # Allow binding 80/443 without full root.

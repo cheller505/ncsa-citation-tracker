@@ -150,8 +150,9 @@ ports 80/443 reachable from the internet for the ACME challenge.
 # Quick start (needs root to bind 80/443):
 sudo /usr/local/bin/caddy start --config deploy/Caddyfile
 
-# Or as a durable systemd service:
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+# Or as a durable systemd service (dedicated config path — this host's
+# /etc/caddy/Caddyfile is the separate Boneyard portal; don't overwrite it):
+sudo cp deploy/Caddyfile /etc/caddy/citation-tracker.Caddyfile
 sudo cp deploy/citation-tracker-caddy.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now citation-tracker-caddy
 ```
