@@ -25,7 +25,7 @@ SYSTEM_NAMES = systems.system_names()
 
 theme.apply(st)
 theme.banner(st)
-theme.lumen_sticker(st)
+theme.llm_sticker(st)
 
 
 def _df(status: str) -> pd.DataFrame:
@@ -368,12 +368,11 @@ with tab_about:
         "and confirmed by a human in the Triage Queue."
     )
 
-    st.subheader("⚡ Powered by the NCSA Lumen LLM service")
+    st.subheader("⚡ Powered by a locally-hosted LLM at NCSA")
     st.markdown(
-        "Accept/reject decisions and the **Ask** assistant run on "
-        "**[lumen.ncsa.illinois.edu](https://lumen.ncsa.illinois.edu/)** — NCSA's "
-        "OpenAI-compatible large-language-model service hosting open models on "
-        "NCSA hardware."
+        "Accept/reject decisions and the **Ask** assistant run on a "
+        "**locally-hosted, OpenAI-compatible LLM service running on NCSA "
+        "hardware** (open models, no third-party API)."
     )
 
     if cfg.eval_mode == "quorum":
@@ -398,7 +397,7 @@ with tab_about:
         "Each model also reads the paper's abstract and — when available — its "
         "open-access full text and acknowledgements (where compute/allocation use "
         "is usually disclosed). A transparent keyword heuristic is the fallback if "
-        "Lumen is unreachable."
+        "the LLM service is unreachable."
     )
 
     st.subheader("Resources tracked")

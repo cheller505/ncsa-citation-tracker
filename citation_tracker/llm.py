@@ -1,10 +1,10 @@
 """LLM-backed citation evaluation against an OpenAI-compatible endpoint.
 
 Replaces the original keyword-only ``evaluate_with_llm`` stub with a real model
-call (default: NCSA Lumen ``nemotron-3-super-120b-a12b``). The model decides
-whether a paper actually *used* the Delta / DeltaAI systems, extracts a usage
-snippet, identifies the system, and reports a confidence score. Because
-nemotron is a reasoning model whose output may include prose around the JSON,
+call against a locally-hosted NCSA LLM endpoint (default model
+``nemotron-3-super-120b-a12b``). The model decides whether a paper actually
+*used* a tracked resource, extracts a usage snippet, identifies the system(s),
+and reports a confidence score. Because some models emit prose around the JSON,
 we extract the last JSON object from the response defensively.
 """
 from __future__ import annotations
@@ -135,8 +135,9 @@ def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str =
         ],
         "temperature": 0,
         "max_tokens": cfg.llm_max_tokens,
-        # Forces syntactically valid JSON on servers that support it (vLLM/Lumen
-        # do). Reasoning models otherwise sometimes emit unquoted values.
+        # Forces syntactically valid JSON on servers that support it (vLLM and
+        # most OpenAI-compatible servers do). Otherwise models sometimes emit
+        # unquoted values.
         "response_format": {"type": "json_object"},
     }
     headers = {

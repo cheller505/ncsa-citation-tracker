@@ -10,15 +10,15 @@
       rebuild migration), added `systems` (comma-separated) + `zotero_key`.
 - [x] **LLM eval recognizes all systems** and returns a multi-system list;
       verified live (Delta+Taiga+Granite detected together; granite rock
-      rejected). Decisions are made by **Lumen nemotron** (confirmed).
+      rejected). Decisions are made by the NCSA-hosted LLM (nemotron) (confirmed).
 - [x] **Recall fix**: acknowledgement/funding full-text extraction fed to the
       evaluator; uncertain "not used" verdicts route to Pending, not Rejected.
 - [x] **Discovery queries** derived from the registry (NCSA/Illinois-scoped).
 - [x] **Chat fixed**: root cause was the missing `reasoning` field in context;
       now answers "why rejected", counts per system, declines off-topic.
-      Default model `gemma-4-31b-it` (qwen3.6 is unreliable on Lumen → 500s).
-- [x] **Lumen branding**: "Powered by NCSA Lumen LLM" sticker on the front page;
-      About page documents lumen.ncsa.illinois.edu and the models used.
+      Default model `gemma-4-31b-it` (qwen3.6 is unreliable on the host → 500s).
+- [x] **Branding**: "Powered by a locally-hosted LLM at NCSA" sticker on the
+      front page; About page documents the local NCSA LLM service and models used.
 - [x] **Integrations**: Google Scholar Alert IMAP poller (`poll-email`), Zotero
       sync (`zotero-sync`), Semantic Scholar API key, DB `backup` command.
 - [x] Tests: 38 passing (systems, discovery [mocked], routing, multi-system).
@@ -30,7 +30,7 @@
 Refactored from the original single-file prototype into a deployable package.
 
 ### Accuracy
-- [x] **Real LLM evaluation** (`citation_tracker/llm.py`) — NCSA Lumen
+- [x] **Real LLM evaluation** (`citation_tracker/llm.py`) — NCSA-hosted LLM
       `nemotron-3-super-120b-a12b`, strict JSON output, graceful fallback to a
       transparent keyword heuristic.
 - [x] **OpenAlex primary source** — structured authors, ROR-based UIUC

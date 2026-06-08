@@ -11,19 +11,20 @@ service.
 
 - **Discovery** — resolve a paper title to structured metadata (OpenAlex first,
   then Crossref / Semantic Scholar / arXiv / Unpaywall).
-- **Evaluation** — a multi-model **review board** on NCSA Lumen (default:
-  `nemotron-3-super-120b-a12b` + `gemma-4-31b-it` + `qwen3-coder-next`) judges
+- **Evaluation** — a multi-model **review board** on a locally-hosted NCSA LLM
+  service (default: `nemotron-3-super-120b-a12b` + `gemma-4-31b-it` +
+  `qwen3-coder-next`) judges
   whether the paper actually *used* a tracked resource. Each model votes
   independently; a 2-of-3 quorum decides, and **confidence = the models'
   agreement** (not a single model's self-score). Falls back to a single model,
-  then to a transparent keyword heuristic, if Lumen is unavailable.
+  then to a transparent keyword heuristic, if the LLM service is unavailable.
 - **Curation** — a Streamlit dashboard (NCSA/UIUC themed) for human triage, a
   searchable verified inventory, a non-destructive rejection audit log, and
   CSV/BibTeX export.
 - **Automatic discovery** — a scheduled job searches OpenAlex + Crossref for the
   configured queries, skips already-tracked papers, and records every run so the
   **About** page can show which sources were checked and when.
-- **Ask** — a scope-limited chat assistant (cheaper Lumen model, default
+- **Ask** — a scope-limited chat assistant (cheaper model, default
   `gemma-4-31b-it`) that answers questions grounded *only* in the tracked data.
 
 ---
@@ -172,8 +173,9 @@ fallback block in the `Caddyfile` (self-signed, on port 8443).
 
 ## How evaluation works — the LLM review board
 
-Each candidate paper is judged by a **board of three diverse LLMs** running on
-NCSA Lumen, not a single model. The board is the core of the tracker's accuracy.
+Each candidate paper is judged by a **board of three diverse LLMs** running on a
+locally-hosted NCSA LLM service, not a single model. The board is the core of
+the tracker's accuracy.
 
 **What each model sees.** For every paper, `pipeline._evaluate_title()` assembles
 the strongest evidence it can: the title, the abstract, and — when an open-access
@@ -182,7 +184,7 @@ allocations are usually disclosed). All three models receive the same evidence.
 
 **The vote.** `llm.evaluate_quorum()` calls the models **in parallel** (default
 `nemotron-3-super-120b-a12b`, `gemma-4-31b-it`, `qwen3-coder-next` — chosen for
-being different model families *and* reliable on Lumen). Each is given a strict
+being different model families *and* reliable on the NCSA host). Each is given a strict
 JSON contract (`response_format=json_object`) and returns, independently:
 
 ```json
@@ -209,7 +211,7 @@ a record a human has already Verified or Rejected.
 
 **Graceful degradation.** If some board models error or time out, the decision is
 made from whoever responded (down to `EVAL_MIN_RESPONDERS`). Below that it falls
-back to a single model, and if Lumen is entirely unreachable, to a transparent
+back to a single model, and if the LLM service is entirely unreachable, to a transparent
 keyword heuristic (flagged `via=heuristic`, low confidence).
 
 **Configuration** (see `.env.example`):
@@ -221,12 +223,13 @@ keyword heuristic (flagged `via=heuristic`, low confidence).
 | `EVAL_QUORUM` | `2` | votes required to accept |
 | `EVAL_MIN_RESPONDERS` | `2` | min models that must respond to trust the vote |
 
-> **Why three, and why these three?** A reliability test across all Lumen models
-> showed `qwen3.6-35b-a3b` failing under load (HTTP 500s), so it's excluded;
+> **Why three, and why these three?** A reliability test across all available
+> NCSA-hosted models showed `qwen3.6-35b-a3b` failing under load (HTTP 500s), so
+> it's excluded;
 > Nemotron, Gemma, and Qwen-coder are reliable and from three different model
 > families, which is the condition under which an ensemble actually reduces error
-> rather than just echoing one model thrice. Local Lumen inference is free, so the
-> 3× cost is a non-issue.
+> rather than just echoing one model thrice. Local inference on NCSA hardware is
+> free, so the 3× cost is a non-issue.
 
 **Recall note.** Because models can only judge the evidence they're given, the
 biggest remaining error source is *missing* evidence — a paper whose only mention

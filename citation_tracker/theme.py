@@ -42,9 +42,9 @@ _CSS = f"""
   /* Headers */
   h2, h3 {{ color: {ILLINI_BLUE}; }}
 
-  /* ---- "Powered by NCSA Lumen" radiant sticker ---- */
-  .lumen-wrap {{ padding: 0.15rem 0 1.25rem 0; }}
-  .lumen-sticker {{
+  /* ---- "Powered by a local NCSA LLM" radiant sticker ---- */
+  .pb-wrap {{ padding: 0.15rem 0 1.25rem 0; }}
+  .pb-sticker {{
     position: relative;
     display: inline-flex; align-items: center; gap: 0.65rem;
     padding: 0.62rem 1.55rem;
@@ -56,38 +56,38 @@ _CSS = f"""
     border: 1.5px solid rgba(255,255,255,0.55);
     text-shadow: 0 1px 0 rgba(255,255,255,0.45);
     overflow: hidden;
-    animation: lumen-flow 6s ease infinite, lumen-halo 3s ease-in-out infinite;
+    animation: pb-flow 6s ease infinite, pb-halo 3s ease-in-out infinite;
   }}
   /* sweeping light shine across the pill */
-  .lumen-sticker::before {{
+  .pb-sticker::before {{
     content: ""; position: absolute; top: 0; left: -65%;
     width: 55%; height: 100%;
     background: linear-gradient(100deg, transparent, rgba(255,255,255,0.9), transparent);
     transform: skewX(-20deg);
-    animation: lumen-shine 3.6s ease-in-out infinite;
+    animation: pb-shine 3.6s ease-in-out infinite;
   }}
-  .lumen-sticker .txt {{ position: relative; z-index: 1; }}
-  .lumen-sticker .bolt {{
+  .pb-sticker .txt {{ position: relative; z-index: 1; }}
+  .pb-sticker .bolt {{
     position: relative; z-index: 1; font-size: 1.3rem;
     filter: drop-shadow(0 0 6px rgba(255,255,255,0.95));
-    animation: lumen-spark 1.7s ease-in-out infinite;
+    animation: pb-spark 1.7s ease-in-out infinite;
   }}
-  @keyframes lumen-flow {{
+  @keyframes pb-flow {{
     0% {{ background-position: 0% 50%; }}
     50% {{ background-position: 100% 50%; }}
     100% {{ background-position: 0% 50%; }}
   }}
-  @keyframes lumen-halo {{
+  @keyframes pb-halo {{
     0%, 100% {{ box-shadow: 0 0 0 2px rgba(255,255,255,0.4) inset,
                             0 0 16px rgba(255,138,61,0.7), 0 0 30px rgba(255,95,5,0.45); }}
     50% {{ box-shadow: 0 0 0 2px rgba(255,255,255,0.6) inset,
                        0 0 30px rgba(255,176,77,0.95), 0 0 64px rgba(255,95,5,0.72); }}
   }}
-  @keyframes lumen-shine {{ 0% {{ left: -65%; }} 60% {{ left: 135%; }} 100% {{ left: 135%; }} }}
-  @keyframes lumen-spark {{ 0%, 100% {{ transform: scale(1); opacity: 1; }}
+  @keyframes pb-shine {{ 0% {{ left: -65%; }} 60% {{ left: 135%; }} 100% {{ left: 135%; }} }}
+  @keyframes pb-spark {{ 0%, 100% {{ transform: scale(1); opacity: 1; }}
                             50% {{ transform: scale(1.28); opacity: 0.85; }} }}
   @media (prefers-reduced-motion: reduce) {{
-    .lumen-sticker, .lumen-sticker::before, .lumen-sticker .bolt {{ animation: none; }}
+    .pb-sticker, .pb-sticker::before, .pb-sticker .bolt {{ animation: none; }}
   }}
 
   /* System chips (color-coded tags) */
@@ -144,14 +144,14 @@ def chips_html(names) -> str:
     return "".join(out) or '<span class="sys-chip" style="background:#6c757d;color:#fff">Unknown</span>'
 
 
-def lumen_sticker(st, model: str = "") -> None:  # model kept for back-compat, unused
-    """Render the prominent, radiant 'Powered by NCSA Lumen' sticker."""
+def llm_sticker(st, model: str = "") -> None:  # model kept for back-compat, unused
+    """Render the prominent, radiant 'Powered by a local NCSA LLM' sticker."""
     st.markdown(
         """
-        <div class="lumen-wrap">
-          <div class="lumen-sticker">
+        <div class="pb-wrap">
+          <div class="pb-sticker">
             <span class="bolt">⚡</span>
-            <span class="txt">POWERED BY THE NCSA LUMEN LLM SERVICE</span>
+            <span class="txt">POWERED BY A LOCALLY-HOSTED LLM AT NCSA</span>
             <span class="bolt">✨</span>
           </div>
         </div>

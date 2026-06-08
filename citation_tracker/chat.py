@@ -1,6 +1,6 @@
 """A small, scope-limited chat assistant over the tracked citation data.
 
-Uses a cheaper Lumen model (default ``gemma-4-31b-it``) and is grounded *only*
+Uses a cheaper model (default ``gemma-4-31b-it``) and is grounded *only*
 in the project's database: the current citation records plus a description of
 what the tool does. The system prompt forbids answering anything outside that
 scope, so it can't be turned into a general-purpose chatbot.

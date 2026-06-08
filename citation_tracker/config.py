@@ -150,7 +150,8 @@ def get_config() -> Config:
             ],
         ),
         llm_enabled=_get_bool("LLM_ENABLED", True),
-        llm_base_url=os.environ.get("LLM_BASE_URL", "https://lumen.ncsa.illinois.edu/v1").rstrip("/"),
+        # Point at your NCSA-hosted, OpenAI-compatible LLM endpoint via LLM_BASE_URL.
+        llm_base_url=os.environ.get("LLM_BASE_URL", "").rstrip("/"),
         llm_model=os.environ.get("LLM_MODEL", "nemotron-3-super-120b-a12b").strip(),
         llm_api_key=os.environ.get("LLM_API_KEY", "").strip(),
         llm_timeout=int(os.environ.get("LLM_TIMEOUT", "120")),
