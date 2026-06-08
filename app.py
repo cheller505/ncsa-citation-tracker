@@ -62,6 +62,23 @@ with tab_triage:
     st.header("Pending triage")
     pending = db.fetch_by_status("Pending")
 
+    def _row_systems(r) -> list[str]:
+        return [s.strip() for s in ((r["systems"] or r["system"] or "").split(",")) if s.strip()]
+
+    # System filter — buttons for each system plus "All" (default).
+    sys_counts = {}
+    for r in pending:
+        for s in _row_systems(r):
+            sys_counts[s] = sys_counts.get(s, 0) + 1
+
+    def _sys_label(o: str) -> str:
+        return f"All ({len(pending)})" if o == "All" else f"{o} ({sys_counts.get(o, 0)})"
+
+    sys_choice = st.segmented_control(
+        "Filter by system", ["All"] + SYSTEM_NAMES, default="All",
+        selection_mode="single", format_func=_sys_label, key="triage_sys",
+    ) or "All"
+
     # Confidence filter — default view shows only confident finds (>= 0.9).
     fcol1, fcol2 = st.columns([3, 2])
     with fcol1:
@@ -74,6 +91,8 @@ with tab_triage:
         show_unscored = st.checkbox("Also show items with no confidence score", value=True)
 
     def _visible(r) -> bool:
+        if sys_choice != "All" and sys_choice not in _row_systems(r):
+            return False
         c = r["confidence"]
         if c is None:
             return show_unscored
