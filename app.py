@@ -7,10 +7,30 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 
 import altair as alt
 import pandas as pd
 import streamlit as st
+
+try:
+    from zoneinfo import ZoneInfo
+    _DISPLAY_TZ = ZoneInfo("America/Chicago")  # US Central
+except Exception:  # pragma: no cover
+    _DISPLAY_TZ = None
+
+
+def _to_central(ts) -> str:
+    """Render a UTC timestamp string (as stored by SQLite) in US Central time."""
+    if not ts:
+        return "—"
+    try:
+        dt = datetime.strptime(str(ts), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        if _DISPLAY_TZ:
+            dt = dt.astimezone(_DISPLAY_TZ)
+        return dt.strftime("%Y-%m-%d %-I:%M %p %Z")
+    except (ValueError, TypeError):
+        return str(ts)
 
 from citation_tracker import chat, db, export, systems, theme
 from citation_tracker.config import get_config
@@ -42,11 +62,11 @@ c3.metric("Rejected", counts.get("Rejected", 0))
 _last_batch = db.latest_batch("discovery")
 if _last_batch:
     st.caption(
-        f"🌙 **Last batch reviewed:** {_last_batch['finished_at']} UTC — "
+        f"🌙 **Last batch reviewed:** {_to_central(_last_batch['finished_at'])} — "
         f"{_last_batch['candidates']} candidates checked · {_last_batch['new_records']} new · "
         f"{_last_batch['updated_records']} updated · {_last_batch['skipped']} already tracked"
         + (f" · {_last_batch['errors']} errors" if _last_batch['errors'] else "")
-        + " (automated nightly run at 01:00)"
+        + " (automated nightly run at 01:00 Central)"
     )
 else:
     st.caption("🌙 No automated batch has run yet — the nightly discovery run is scheduled for 01:00.")
@@ -430,7 +450,7 @@ with tab_about:
         st.dataframe(
             pd.DataFrame([{
                 "Source": r["source"],
-                "Last checked": r["finished_at"] or r["started_at"],
+                "Last checked": _to_central(r["finished_at"] or r["started_at"]),
                 "Last query": r["query"],
                 "Status": r["status"],
             } for r in latest]),
@@ -447,7 +467,7 @@ with tab_about:
         if runs:
             st.dataframe(
                 pd.DataFrame([{
-                    "Started": r["started_at"], "Source": r["source"], "Query": r["query"],
+                    "Started": _to_central(r["started_at"]), "Source": r["source"], "Query": r["query"],
                     "Found": r["candidates_found"], "New": r["new_records"],
                     "Updated": r["updated_records"], "Status": r["status"],
                 } for r in runs]),
