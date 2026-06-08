@@ -9,6 +9,7 @@ we extract the last JSON object from the response defensively.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import re
 from dataclasses import dataclass
@@ -118,14 +119,15 @@ def is_configured() -> bool:
 
 
 def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str = "",
-             acknowledgements: str = "") -> Evaluation:
-    """Call the LLM; raise LLMError on failure so the caller can fall back."""
+             acknowledgements: str = "", model: str | None = None) -> Evaluation:
+    """Call one LLM; raise LLMError on failure so the caller can fall back."""
     cfg = get_config()
     if not is_configured():
         raise LLMError("LLM not configured (set LLM_API_KEY or LLM_ENABLED=false).")
+    model = model or cfg.llm_model
 
     payload = {
-        "model": cfg.llm_model,
+        "model": model,
         "messages": [
             {"role": "system", "content": _build_system_prompt()},
             {"role": "user", "content": _build_user_prompt(
@@ -188,3 +190,80 @@ def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str =
         reasoning=str(parsed.get("reasoning", "")).strip(),
         source="llm",
     )
+
+
+def evaluate_quorum(title: str, abstract: str = "", full_text: str = "", trigger: str = "",
+                    acknowledgements: str = "") -> tuple[Evaluation, list[dict]]:
+    """Run the configured model board in parallel and return a consensus.
+
+    Returns ``(consensus_evaluation, votes)`` where ``votes`` is a per-model
+    breakdown. Confidence is the **inter-model agreement ratio** (1.0 unanimous,
+    ~0.67 for 2/3, 0.5 for a split) — a far more honest signal than any single
+    model's self-reported number. Degrades gracefully if some models fail, and
+    raises LLMError only if fewer than ``eval_min_responders`` respond.
+    """
+    cfg = get_config()
+    if not is_configured():
+        raise LLMError("LLM not configured (set LLM_API_KEY or LLM_ENABLED=false).")
+    models = cfg.eval_models or [cfg.llm_model]
+
+    def _one(m: str):
+        try:
+            return m, evaluate(title, abstract, full_text, trigger, acknowledgements, model=m), None
+        except LLMError as exc:
+            return m, None, str(exc)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(models), 6)) as ex:
+        results = list(ex.map(_one, models))
+
+    votes: list[dict] = []
+    responders: list[tuple[str, Evaluation]] = []
+    for m, e, err in results:
+        if e is not None:
+            votes.append({"model": m, "uses_system": e.uses_system, "systems": e.systems,
+                          "confidence": round(e.confidence, 2),
+                          "reasoning": (e.reasoning or "")[:300]})
+            responders.append((m, e))
+        else:
+            votes.append({"model": m, "error": err})
+            log.warning("Quorum: model %s failed: %s", m, err)
+
+    if len(responders) < cfg.eval_min_responders:
+        if responders:
+            m, e = responders[0]
+            degraded = Evaluation(
+                e.uses_system, e.systems, e.confidence, e.usage_context,
+                f"[only {m} of the board responded] {e.reasoning}",
+                source=f"quorum-degraded:{m}",
+            )
+            return degraded, votes
+        raise LLMError(f"Quorum failed: 0/{len(models)} board models responded.")
+
+    total = len(responders)
+    yes = [e for _, e in responders if e.uses_system]
+    decision_yes = len(yes) * 2 > total          # strict majority of responders
+    agree = len(yes) if decision_yes else total - len(yes)
+    confidence = round(agree / total, 2)
+
+    if decision_yes:
+        merged: list[str] = []
+        for e in yes:
+            merged.extend(e.systems)
+        systems = normalize_system_list(merged)
+        best = max(yes, key=lambda e: e.confidence)
+        usage = best.usage_context
+    else:
+        systems = []
+        usage = ""
+
+    names = ", ".join(m for m, _ in responders)
+    verdict = "used" if decision_yes else "did not use"
+    reasoning = f"Board: {agree}/{total} models ({names}) agreed the paper {verdict} a tracked resource."
+    return Evaluation(
+        uses_system=decision_yes and bool(systems),
+        systems=systems,
+        confidence=confidence,
+        usage_context=usage,
+        reasoning=reasoning,
+        source=f"quorum({agree}/{total})",
+    ), votes

@@ -42,6 +42,19 @@ def _candidates_openalex(query: str, limit: int) -> list[str]:
     return [w.get("title") for w in data.get("results", []) if w.get("title")]
 
 
+def _candidates_openalex_fulltext(query: str, limit: int) -> list[str]:
+    """Search OpenAlex *full text* — catches systems mentioned only in the body
+    or acknowledgements (where title/abstract search misses them)."""
+    cfg = get_config()
+    params = {"filter": f"fulltext.search:{query}", "per_page": limit}
+    if cfg.has_contact_email:
+        params["mailto"] = cfg.contact_email
+    data = get_json("https://api.openalex.org/works", params=params)
+    if not data:
+        return []
+    return [w.get("title") for w in data.get("results", []) if w.get("title")]
+
+
 def _candidates_crossref(query: str, limit: int) -> list[str]:
     cfg = get_config()
     params = {"query.bibliographic": query, "rows": limit}
@@ -60,6 +73,7 @@ def _candidates_crossref(query: str, limit: int) -> list[str]:
 
 _SOURCES = {
     "openalex": _candidates_openalex,
+    "openalex_fulltext": _candidates_openalex_fulltext,
     "crossref": _candidates_crossref,
 }
 

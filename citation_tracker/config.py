@@ -73,6 +73,12 @@ class Config:
     llm_timeout: int
     llm_max_tokens: int
 
+    # --- Evaluation mode: single model or multi-model quorum board -------
+    eval_mode: str            # 'quorum' | 'single'
+    eval_models: list[str]
+    eval_quorum: int
+    eval_min_responders: int
+
     # --- Chat assistant backend (cheaper model, scoped to project data) --
     chat_enabled: bool
     chat_model: str
@@ -149,6 +155,13 @@ def get_config() -> Config:
         llm_api_key=os.environ.get("LLM_API_KEY", "").strip(),
         llm_timeout=int(os.environ.get("LLM_TIMEOUT", "120")),
         llm_max_tokens=int(os.environ.get("LLM_MAX_TOKENS", "4000")),
+        eval_mode=os.environ.get("EVAL_MODE", "quorum").strip().lower(),
+        eval_models=_get_list(
+            "EVAL_MODELS",
+            ["nemotron-3-super-120b-a12b", "gemma-4-31b-it", "qwen3-coder-next"],
+        ),
+        eval_quorum=int(os.environ.get("EVAL_QUORUM", "2")),
+        eval_min_responders=int(os.environ.get("EVAL_MIN_RESPONDERS", "2")),
         chat_enabled=_get_bool("CHAT_ENABLED", True),
         chat_model=os.environ.get("CHAT_MODEL", "gemma-4-31b-it").strip(),
         chat_max_rows=int(os.environ.get("CHAT_MAX_ROWS", "400")),

@@ -134,8 +134,13 @@ def _route_status(evaluation: Evaluation) -> str:
     return "Pending" if evaluation.uses_system else "Rejected"
 
 
-def _evaluate_title(title: str, trigger: str) -> tuple[Evaluation, WorkMetadata, str]:
-    """Gather metadata, fetch acknowledgements, and evaluate. Shared by ingest+reevaluate."""
+def _evaluate_title(title: str, trigger: str) -> tuple[Evaluation, WorkMetadata, str, str]:
+    """Gather metadata, fetch acknowledgements, and evaluate. Shared by ingest+reevaluate.
+
+    Returns (evaluation, metadata, award_number, model_votes_json).
+    """
+    import json
+
     meta = _gather_metadata(title)
     full_text = fetch_pdf_text(meta.pdf_url) if meta.pdf_url else ""
     eval_text = meta.abstract or full_text
@@ -145,8 +150,15 @@ def _evaluate_title(title: str, trigger: str) -> tuple[Evaluation, WorkMetadata,
     ]
     acknowledgements = extract_acknowledgements(full_text, award_terms + system_terms)
 
+    cfg = get_config()
+    votes_json = None
     try:
-        evaluation = llm.evaluate(title, meta.abstract, full_text, trigger, acknowledgements)
+        if cfg.eval_mode == "quorum":
+            evaluation, votes = llm.evaluate_quorum(
+                title, meta.abstract, full_text, trigger, acknowledgements)
+            votes_json = json.dumps(votes)
+        else:
+            evaluation = llm.evaluate(title, meta.abstract, full_text, trigger, acknowledgements)
     except LLMError as exc:
         log.warning("LLM evaluation unavailable (%s); using heuristic.", exc)
         evaluation = _heuristic_eval(title, eval_text + "\n" + acknowledgements, trigger)
@@ -156,7 +168,7 @@ def _evaluate_title(title: str, trigger: str) -> tuple[Evaluation, WorkMetadata,
         award_number = ", ".join(
             dict.fromkeys(meta.award_numbers + ([award_number] if award_number else []))
         )
-    return evaluation, meta, award_number
+    return evaluation, meta, award_number, votes_json
 
 
 def ingest(title: str, trigger: str = "", db_path: Path | str | None = None) -> IngestResult:
@@ -166,7 +178,7 @@ def ingest(title: str, trigger: str = "", db_path: Path | str | None = None) -> 
         raise ValueError("Empty title")
     log.info("Ingesting: %s (trigger=%r)", title, trigger)
 
-    evaluation, meta, award_number = _evaluate_title(title, trigger)
+    evaluation, meta, award_number, votes_json = _evaluate_title(title, trigger)
     status = _route_status(evaluation)
     matched_systems = evaluation.systems
 
@@ -184,6 +196,7 @@ def ingest(title: str, trigger: str = "", db_path: Path | str | None = None) -> 
         "award_number": award_number,
         "doi_or_url": meta.doi_url,
         "source": evaluation.source,
+        "model_votes": votes_json,
     }
 
     row_id, action = db.upsert_citation(record, db_path=db_path)
@@ -247,7 +260,7 @@ def reevaluate(status: str = "Rejected", limit: int | None = None,
         title = row["title"]
         trigger = row["alert_trigger"] or "reevaluate"
         try:
-            evaluation, meta, award_number = _evaluate_title(title, trigger)
+            evaluation, meta, award_number, votes_json = _evaluate_title(title, trigger)
         except Exception as exc:  # noqa: BLE001
             summary.errors += 1
             log.error("Re-eval failed for %r: %s", title, exc)
@@ -264,6 +277,7 @@ def reevaluate(status: str = "Rejected", limit: int | None = None,
             "usage_context": evaluation.usage_context,
             "award_number": award_number or row["award_number"],
             "source": f"{evaluation.source}-reeval",
+            "model_votes": votes_json,
         }, db_path=db_path)
         if new_status != old_status:
             summary.changed += 1

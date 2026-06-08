@@ -5,6 +5,7 @@ Configuration comes entirely from the environment / .env (see config.py).
 """
 from __future__ import annotations
 
+import json
 import re
 
 import altair as alt
@@ -84,8 +85,9 @@ with tab_triage:
     with fcol1:
         min_conf = st.slider(
             "Minimum confidence to show", 0.0, 1.0, value=0.9, step=0.05,
-            help="Confirmed finds are ≥ 0.90. Lower this to review less-certain "
-                 "candidates; they are not flagged for review automatically.",
+            help="With the review board, confidence = inter-model agreement: "
+                 "1.0 = unanimous, ~0.67 = 2 of 3. Default shows unanimous finds; "
+                 "lower it to review split decisions.",
         )
     with fcol2:
         show_unscored = st.checkbox("Also show items with no confidence score", value=True)
@@ -111,6 +113,19 @@ with tab_triage:
             row_systems = [s.strip() for s in ((row["systems"] or row["system"] or "").split(","))
                            if s.strip()]
             st.markdown(theme.chips_html(row_systems), unsafe_allow_html=True)
+            _votes_raw = row["model_votes"] if "model_votes" in row.keys() else None
+            if _votes_raw:
+                try:
+                    badges = []
+                    for v in json.loads(_votes_raw):
+                        short = v["model"].split("-")[0]
+                        if "error" in v:
+                            badges.append(f"{short} ⚠️")
+                        else:
+                            badges.append(f"{short} {'✅' if v['uses_system'] else '❌'}")
+                    st.caption("🧑‍⚖️ Review board: " + "  ·  ".join(badges))
+                except (ValueError, KeyError, TypeError):
+                    pass
             col1, col2 = st.columns([2, 1])
             with col1:
                 with st.form(key=f"form_{row['id']}"):

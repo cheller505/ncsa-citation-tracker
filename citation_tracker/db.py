@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS citations (
     uiuc_authors_depts TEXT,
     award_number TEXT,
     doi_or_url TEXT,
-    source TEXT,                            -- which evaluator produced status (llm/heuristic)
+    source TEXT,                            -- which evaluator produced status (llm/heuristic/quorum)
+    model_votes TEXT,                       -- JSON: per-model board verdicts
     zotero_key TEXT,                        -- Zotero item key once synced
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -47,8 +48,8 @@ CREATE TABLE IF NOT EXISTS citations (
 _CANONICAL_COLUMNS = [
     "id", "title", "doi", "system", "systems", "alert_trigger", "status",
     "confidence", "reasoning", "usage_context", "uiuc_affiliated",
-    "uiuc_authors_depts", "award_number", "doi_or_url", "source", "zotero_key",
-    "created_at", "updated_at",
+    "uiuc_authors_depts", "award_number", "doi_or_url", "source", "model_votes",
+    "zotero_key", "created_at", "updated_at",
 ]
 
 RUNS_TABLE_SQL = """
@@ -96,6 +97,7 @@ _MIGRATION_COLUMNS = {
     "updated_at": "TIMESTAMP",
     "systems": "TEXT",
     "zotero_key": "TEXT",
+    "model_votes": "TEXT",
 }
 
 EDITABLE_FIELDS = (
@@ -234,7 +236,7 @@ def upsert_citation(data: dict[str, Any], db_path: Path | str | None = None) -> 
         cols = (
             "title", "doi", "system", "systems", "alert_trigger", "status", "confidence",
             "reasoning", "usage_context", "uiuc_affiliated", "uiuc_authors_depts",
-            "award_number", "doi_or_url", "source",
+            "award_number", "doi_or_url", "source", "model_votes",
         )
         placeholders = ", ".join("?" for _ in cols)
         try:
@@ -275,6 +277,7 @@ def _update_from_pipeline(conn: sqlite3.Connection, existing: sqlite3.Row, data:
             award_number = ?,
             doi_or_url = COALESCE(NULLIF(?, ''), doi_or_url),
             source = ?,
+            model_votes = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
         """,
@@ -292,6 +295,7 @@ def _update_from_pipeline(conn: sqlite3.Connection, existing: sqlite3.Row, data:
             data.get("award_number") or existing["award_number"],
             data.get("doi_or_url"),
             data.get("source"),
+            data.get("model_votes"),
             existing["id"],
         ),
     )
@@ -333,13 +337,13 @@ def update_evaluation(citation_id: int, data: dict[str, Any], db_path: Path | st
             UPDATE citations SET
                 system = ?, systems = ?, status = ?, confidence = ?,
                 reasoning = ?, usage_context = ?, award_number = ?, source = ?,
-                updated_at = CURRENT_TIMESTAMP
+                model_votes = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
             (
                 data.get("system"), data.get("systems"), data["status"],
                 data.get("confidence"), data.get("reasoning"), data.get("usage_context"),
-                data.get("award_number"), data.get("source"), citation_id,
+                data.get("award_number"), data.get("source"), data.get("model_votes"), citation_id,
             ),
         )
 
