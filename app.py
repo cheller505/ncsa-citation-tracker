@@ -364,22 +364,41 @@ with tab_about:
     st.markdown(
         "Tracks research papers that used **NCSA and University of Illinois "
         "computing & data resources**. Candidate papers are discovered "
-        "automatically, evaluated by an LLM, and confirmed by a human in the "
-        "Triage Queue."
+        "automatically every night, evaluated by a multi-model **review board**, "
+        "and confirmed by a human in the Triage Queue."
     )
 
     st.subheader("⚡ Powered by the NCSA Lumen LLM service")
     st.markdown(
-        "Accept/reject decisions and the **Ask** assistant are powered by "
-        "**[lumen.ncsa.illinois.edu](https://lumen.ncsa.illinois.edu/)**, NCSA's "
+        "Accept/reject decisions and the **Ask** assistant run on "
+        "**[lumen.ncsa.illinois.edu](https://lumen.ncsa.illinois.edu/)** — NCSA's "
         "OpenAI-compatible large-language-model service hosting open models on "
-        "NCSA hardware.\n\n"
-        f"- **Evaluation model:** `{cfg.llm_model}`"
-        f"{' *(LLM disabled — using keyword heuristic)*' if not cfg.llm_enabled else ''}\n"
-        f"- **Ask assistant model:** `{cfg.chat_model}`\n\n"
-        "Every paper's accept/reject verdict, confidence score, and reasoning in "
-        "this tracker comes from that service; a transparent keyword heuristic is "
-        "used only if Lumen is unreachable."
+        "NCSA hardware."
+    )
+
+    if cfg.eval_mode == "quorum":
+        st.markdown(
+            f"**🧑‍⚖️ Review board ({cfg.eval_quorum}-of-{len(cfg.eval_models)} quorum).** "
+            "Each paper is judged independently and in parallel by several diverse "
+            "models; a paper is accepted only if a majority agree, and the "
+            "**confidence score is their level of agreement** (1.0 = unanimous, "
+            "≈0.67 = 2 of 3) rather than any single model's self-assessment. Each "
+            "model's verdict is shown on the paper in the Triage Queue."
+        )
+        st.markdown("**Board models:**\n" + "\n".join(f"- `{m}`" for m in cfg.eval_models))
+        st.markdown(f"**Ask assistant model:** `{cfg.chat_model}`")
+    else:
+        st.markdown(
+            f"- **Evaluation model:** `{cfg.llm_model}`"
+            f"{' *(LLM disabled — keyword heuristic)*' if not cfg.llm_enabled else ''}\n"
+            f"- **Ask assistant model:** `{cfg.chat_model}`"
+        )
+    st.caption(
+        "Every verdict, confidence score, and reasoning comes from this service. "
+        "Each model also reads the paper's abstract and — when available — its "
+        "open-access full text and acknowledgements (where compute/allocation use "
+        "is usually disclosed). A transparent keyword heuristic is the fallback if "
+        "Lumen is unreachable."
     )
 
     st.subheader("Resources tracked")
@@ -392,8 +411,10 @@ with tab_about:
 
     st.subheader("Data sources checked")
     st.markdown(
-        "- **OpenAlex** — primary discovery + structured authors, institution "
-        "(ROR) affiliation, and grant/award metadata.\n"
+        "- **OpenAlex** — title/abstract discovery + structured authors, "
+        "institution (ROR) affiliation, and grant/award metadata.\n"
+        "- **OpenAlex full-text** — searches the *body and acknowledgements*, "
+        "catching systems named only in a paper's text (not its title/abstract).\n"
         "- **Crossref** — discovery + DOI resolution (polite pool).\n"
         "- **Semantic Scholar** — abstracts and open-access PDF links.\n"
         "- **arXiv** — preprint matching.\n"
