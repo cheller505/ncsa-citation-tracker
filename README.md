@@ -11,10 +11,12 @@ service.
 
 - **Discovery** — resolve a paper title to structured metadata (OpenAlex first,
   then Crossref / Semantic Scholar / arXiv / Unpaywall).
-- **Evaluation** — an LLM (default: NCSA Lumen `nemotron-3-super-120b-a12b`)
-  decides whether the paper actually *used* Delta/DeltaAI, extracts a usage
-  snippet, and reports a confidence score. Falls back to a transparent keyword
-  heuristic if no LLM is configured.
+- **Evaluation** — a multi-model **review board** on NCSA Lumen (default:
+  `nemotron-3-super-120b-a12b` + `gemma-4-31b-it` + `qwen3-coder-next`) judges
+  whether the paper actually *used* a tracked resource. Each model votes
+  independently; a 2-of-3 quorum decides, and **confidence = the models'
+  agreement** (not a single model's self-score). Falls back to a single model,
+  then to a transparent keyword heuristic, if Lumen is unavailable.
 - **Curation** — a Streamlit dashboard (NCSA/UIUC themed) for human triage, a
   searchable verified inventory, a non-destructive rejection audit log, and
   CSV/BibTeX export.
@@ -31,9 +33,9 @@ service.
 ```
                 ┌─────────────────────────────────────────────┐
   title /       │  pipeline.ingest()                          │
-  Scholar  ───► │   1. sources.py   (OpenAlex→Crossref→SS→arXiv→Unpaywall)
-  alert         │   2. pdf.py       (safe OA-PDF fetch + extract)
-                │   3. llm.py       (nemotron eval) ── fallback ─► heuristic
+  Scholar  ───► │   1. sources.py   (OpenAlex + full-text → Crossref → SS → arXiv → Unpaywall)
+  alert         │   2. pdf.py       (OA-PDF fetch + acknowledgements extract)
+                │   3. llm.py       (3-model review board, 2/3 quorum) ─► heuristic fallback
                 │   4. db.upsert    (dedup by DOI / similar title)
                 └───────────────┬─────────────────────────────┘
                                 │
@@ -168,24 +170,69 @@ fallback block in the `Caddyfile` (self-signed, on port 8443).
 
 ---
 
-## How evaluation works
+## How evaluation works — the LLM review board
 
-`llm.py` sends the title + abstract/excerpt to the model with a strict
-JSON-output contract and `response_format=json_object` (with a graceful retry
-for endpoints that don't support it). The model returns
-`{uses_system, system, confidence, usage_context, reasoning}`. New records land
-as **Pending** (used) or **Rejected** (not used) — a human makes the final call
-in the dashboard. The automated pipeline never overrides a record a human has
-already Verified or Rejected.
+Each candidate paper is judged by a **board of three diverse LLMs** running on
+NCSA Lumen, not a single model. The board is the core of the tracker's accuracy.
 
-If `LLM_ENABLED=false` or the endpoint is unreachable, a transparent keyword
-heuristic is used instead (low confidence, flagged `via=heuristic`).
+**What each model sees.** For every paper, `pipeline._evaluate_title()` assembles
+the strongest evidence it can: the title, the abstract, and — when an open-access
+PDF is found — the extracted **acknowledgements / funding text** (where compute
+allocations are usually disclosed). All three models receive the same evidence.
 
-**Known limitation:** evaluation sees the title + abstract (and an open-access
-PDF when one is found). Papers whose Delta/DeltaAI usage appears *only* in an
-acknowledgements section that isn't in the abstract may be rejected. Such
-rejections are kept in the audit log and can be restored to the queue; see the
-suggestions in `project_status.md` for full-text acknowledgement parsing.
+**The vote.** `llm.evaluate_quorum()` calls the models **in parallel** (default
+`nemotron-3-super-120b-a12b`, `gemma-4-31b-it`, `qwen3-coder-next` — chosen for
+being different model families *and* reliable on Lumen). Each is given a strict
+JSON contract (`response_format=json_object`) and returns, independently:
+
+```json
+{ "uses_system": true, "systems": ["Delta"], "confidence": 0.95,
+  "usage_context": "…", "reasoning": "…" }
+```
+
+**Consensus.** A paper is accepted only if a **majority (2 of 3)** agree it used a
+tracked resource. Two things make this better than a single model:
+
+1. **Agreement-based confidence.** The stored `confidence` is the *fraction of the
+   board that agrees* with the decision — `1.0` unanimous, `~0.67` for 2-of-3 —
+   not a single model's (notoriously uncalibrated) self-report. The Triage Queue
+   defaults to showing only unanimous finds; split (2/3) decisions are hidden
+   until you lower the confidence slider, so disagreement automatically routes a
+   paper to human review.
+2. **Transparency.** Every model's individual verdict is stored (`model_votes`)
+   and shown in the dashboard — e.g. `🧑‍⚖️ nemotron ✅ · gemma ✅ · qwen3 ❌`.
+
+The merged result sets the record's systems (union of the yes-voters'), status,
+confidence, and reasoning. New records land as **Pending** (used) or **Rejected**
+(not used); a human makes the final call. The automated pipeline never overrides
+a record a human has already Verified or Rejected.
+
+**Graceful degradation.** If some board models error or time out, the decision is
+made from whoever responded (down to `EVAL_MIN_RESPONDERS`). Below that it falls
+back to a single model, and if Lumen is entirely unreachable, to a transparent
+keyword heuristic (flagged `via=heuristic`, low confidence).
+
+**Configuration** (see `.env.example`):
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `EVAL_MODE` | `quorum` | `quorum` (board) or `single` (one model) |
+| `EVAL_MODELS` | nemotron, gemma, qwen3-coder | the board roster (comma-separated) |
+| `EVAL_QUORUM` | `2` | votes required to accept |
+| `EVAL_MIN_RESPONDERS` | `2` | min models that must respond to trust the vote |
+
+> **Why three, and why these three?** A reliability test across all Lumen models
+> showed `qwen3.6-35b-a3b` failing under load (HTTP 500s), so it's excluded;
+> Nemotron, Gemma, and Qwen-coder are reliable and from three different model
+> families, which is the condition under which an ensemble actually reduces error
+> rather than just echoing one model thrice. Local Lumen inference is free, so the
+> 3× cost is a non-issue.
+
+**Recall note.** Because models can only judge the evidence they're given, the
+biggest remaining error source is *missing* evidence — a paper whose only mention
+of a system is in an acknowledgements section not present in the abstract or
+fetched full text. The OpenAlex **full-text discovery source** and Google Scholar
+alert ingestion (`poll-email`) are the levers that surface those papers.
 
 ## Automatic discovery & the Ask assistant
 
