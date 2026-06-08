@@ -1,0 +1,13 @@
+# Polls the Scholar-alert mailbox hourly (alerts arrive sporadically; the poller
+# marks messages seen so re-polling is cheap). Enable once IMAP_* is set in .env:
+#   sudo cp deploy/citation-email.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now citation-email.timer
+[Unit]
+Description=Hourly Google Scholar alert email poll
+
+[Timer]
+OnCalendar=*-*-* *:07:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

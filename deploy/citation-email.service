@@ -1,0 +1,14 @@
+# Oneshot: ingest titles from Google Scholar Alert emails (IMAP).
+# Triggered by citation-email.timer. Requires IMAP_* in .env.
+[Unit]
+Description=NCSA Citation Tracker - Google Scholar alert email ingestion
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cheller
+Group=cheller
+WorkingDirectory=/home/cheller/gemini
+EnvironmentFile=/home/cheller/gemini/.env
+ExecStart=/home/cheller/gemini/venv/bin/python -m citation_tracker.cli poll-email
