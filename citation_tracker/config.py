@@ -79,6 +79,10 @@ class Config:
     eval_quorum: int
     eval_min_responders: int
 
+    # --- Branding (kept out of the public repo; set in local .env) -------
+    service_name: str
+    service_url: str
+
     # --- Chat assistant backend (cheaper model, scoped to project data) --
     chat_enabled: bool
     chat_model: str
@@ -163,6 +167,10 @@ def get_config() -> Config:
         ),
         eval_quorum=int(os.environ.get("EVAL_QUORUM", "2")),
         eval_min_responders=int(os.environ.get("EVAL_MIN_RESPONDERS", "2")),
+        # Display name for the LLM service. Generic by default; set SERVICE_NAME
+        # (and optional SERVICE_URL) in the local .env for site-specific branding.
+        service_name=os.environ.get("SERVICE_NAME", "a locally-hosted LLM at NCSA").strip(),
+        service_url=os.environ.get("SERVICE_URL", "").strip(),
         chat_enabled=_get_bool("CHAT_ENABLED", True),
         chat_model=os.environ.get("CHAT_MODEL", "gemma-4-31b-it").strip(),
         chat_max_rows=int(os.environ.get("CHAT_MAX_ROWS", "400")),

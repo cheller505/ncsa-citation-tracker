@@ -145,13 +145,20 @@ def chips_html(names) -> str:
 
 
 def llm_sticker(st, model: str = "") -> None:  # model kept for back-compat, unused
-    """Render the prominent, radiant 'Powered by a local NCSA LLM' sticker."""
+    """Render the prominent, radiant 'Powered by …' sticker.
+
+    The service name comes from config (SERVICE_NAME in .env), so the public repo
+    stays generic while a deployment can show its own branding.
+    """
+    from .config import get_config
+
+    label = get_config().service_name.upper()
     st.markdown(
-        """
+        f"""
         <div class="pb-wrap">
           <div class="pb-sticker">
             <span class="bolt">⚡</span>
-            <span class="txt">POWERED BY A LOCALLY-HOSTED LLM AT NCSA</span>
+            <span class="txt">POWERED BY {label}</span>
             <span class="bolt">✨</span>
           </div>
         </div>

@@ -368,11 +368,12 @@ with tab_about:
         "and confirmed by a human in the Triage Queue."
     )
 
-    st.subheader("⚡ Powered by a locally-hosted LLM at NCSA")
+    _svc = f"[{cfg.service_name}]({cfg.service_url})" if cfg.service_url else f"**{cfg.service_name}**"
+    st.subheader(f"⚡ Powered by {cfg.service_name}")
     st.markdown(
-        "Accept/reject decisions and the **Ask** assistant run on a "
-        "**locally-hosted, OpenAI-compatible LLM service running on NCSA "
-        "hardware** (open models, no third-party API)."
+        f"Accept/reject decisions and the **Ask** assistant run on {_svc} — an "
+        "OpenAI-compatible LLM service running on NCSA hardware (open models, no "
+        "third-party API)."
     )
 
     if cfg.eval_mode == "quorum":
