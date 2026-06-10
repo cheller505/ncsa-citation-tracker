@@ -79,6 +79,13 @@ class Config:
     eval_quorum: int
     eval_min_responders: int
 
+    # --- Local fallback LLM (used when the primary endpoint is down) -----
+    local_llm_base_url: str
+    local_llm_api_key: str
+    local_llm_timeout: int            # CPU inference is slow; allow more time
+    eval_fallback_models: list[str]   # positionally paired with eval_models
+    chat_fallback_model: str
+
     # --- Branding (kept out of the public repo; set in local .env) -------
     service_name: str
     service_url: str
@@ -167,6 +174,11 @@ def get_config() -> Config:
         ),
         eval_quorum=int(os.environ.get("EVAL_QUORUM", "2")),
         eval_min_responders=int(os.environ.get("EVAL_MIN_RESPONDERS", "2")),
+        local_llm_base_url=os.environ.get("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1").rstrip("/"),
+        local_llm_api_key=os.environ.get("LOCAL_LLM_API_KEY", "ollama").strip(),
+        local_llm_timeout=int(os.environ.get("LOCAL_LLM_TIMEOUT", "300")),
+        eval_fallback_models=_get_list("EVAL_FALLBACK_MODELS", []),
+        chat_fallback_model=os.environ.get("CHAT_FALLBACK_MODEL", "").strip(),
         # Display name for the LLM service. Generic by default; set SERVICE_NAME
         # (and optional SERVICE_URL) in the local .env for site-specific branding.
         service_name=os.environ.get("SERVICE_NAME", "a locally-hosted LLM at NCSA").strip(),

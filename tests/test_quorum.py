@@ -12,7 +12,9 @@ def board(monkeypatch):
     monkeypatch.setenv("EVAL_QUORUM", "2")
     monkeypatch.setenv("EVAL_MIN_RESPONDERS", "2")
     monkeypatch.setenv("LLM_API_KEY", "sk-test")
+    monkeypatch.setenv("LLM_BASE_URL", "http://test/v1")
     monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.setenv("EVAL_FALLBACK_MODELS", "")  # no local fallback in these tests
     get_config.cache_clear()
     yield
     get_config.cache_clear()
@@ -20,7 +22,8 @@ def board(monkeypatch):
 
 def _mock(verdicts):
     """verdicts: {model: Evaluation or 'ERR'}"""
-    def _fake(title, abstract="", full_text="", trigger="", acknowledgements="", model=None):
+    def _fake(title, abstract="", full_text="", trigger="", acknowledgements="", model=None,
+              base_url=None, api_key=None, timeout=None):
         v = verdicts[model]
         if v == "ERR":
             raise LLMError(f"{model} down")

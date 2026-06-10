@@ -407,6 +407,13 @@ with tab_about:
         )
         st.markdown("**Board models:**\n" + "\n".join(f"- `{m}`" for m in cfg.eval_models))
         st.markdown(f"**Ask assistant model:** `{cfg.chat_model}`")
+        if cfg.eval_fallback_models:
+            st.markdown(
+                "**🛟 Local fallback board.** If the primary service is down, each "
+                "board seat automatically drops to a small model running locally "
+                "on this host (CPU), so evaluation keeps working during an outage:\n"
+                + "\n".join(f"- `{m}` *(local backup)*" for m in cfg.eval_fallback_models)
+            )
     else:
         st.markdown(
             f"- **Evaluation model:** `{cfg.llm_model}`"
@@ -417,8 +424,8 @@ with tab_about:
         "Every verdict, confidence score, and reasoning comes from this service. "
         "Each model also reads the paper's abstract and — when available — its "
         "open-access full text and acknowledgements (where compute/allocation use "
-        "is usually disclosed). A transparent keyword heuristic is the fallback if "
-        "the LLM service is unreachable."
+        "is usually disclosed). If the primary service is unreachable, evaluation "
+        "falls back to local models on this host, then to a keyword heuristic."
     )
 
     st.subheader("Resources tracked")

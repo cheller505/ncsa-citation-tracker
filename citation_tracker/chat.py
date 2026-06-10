@@ -113,27 +113,26 @@ def ask(question: str, history: list[dict] | None = None, db_path=None) -> str:
             messages.append({"role": turn["role"], "content": turn["content"]})
     messages.append({"role": "user", "content": question})
 
-    payload = {
-        "model": cfg.chat_model,
-        "messages": messages,
-        "temperature": 0.2,
-        "max_tokens": cfg.llm_max_tokens,
-    }
-    headers = {
-        "Authorization": f"Bearer {cfg.llm_api_key}",
-        "Content-Type": "application/json",
-    }
-    try:
-        resp = get_session().post(
-            f"{cfg.llm_base_url}/chat/completions",
-            json=payload, headers=headers, timeout=cfg.llm_timeout,
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise ChatError(f"Chat request failed: {exc}") from exc
-
-    if resp.status_code != 200:
-        raise ChatError(f"Chat HTTP {resp.status_code}: {resp.text[:300]}")
-    try:
+    def _call(model: str, base_url: str, api_key: str) -> str:
+        payload = {"model": model, "messages": messages, "temperature": 0.2,
+                   "max_tokens": cfg.llm_max_tokens}
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        resp = get_session().post(f"{base_url.rstrip('/')}/chat/completions",
+                                  json=payload, headers=headers, timeout=cfg.llm_timeout)
+        if resp.status_code != 200:
+            raise ChatError(f"Chat HTTP {resp.status_code}: {resp.text[:200]}")
         return resp.json()["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, ValueError) as exc:
-        raise ChatError(f"Unexpected chat response: {exc}") from exc
+
+    # Primary endpoint first, then the local fallback model if configured.
+    try:
+        return _call(cfg.chat_model, cfg.llm_base_url, cfg.llm_api_key)
+    except Exception as primary_exc:  # noqa: BLE001
+        if cfg.chat_fallback_model and cfg.local_llm_base_url:
+            log.warning("Chat primary failed (%s); trying local fallback %s",
+                        primary_exc, cfg.chat_fallback_model)
+            try:
+                return _call(cfg.chat_fallback_model, cfg.local_llm_base_url,
+                             cfg.local_llm_api_key)
+            except Exception as fb_exc:  # noqa: BLE001
+                raise ChatError(f"Chat failed (primary + local fallback): {fb_exc}") from fb_exc
+        raise ChatError(f"Chat request failed: {primary_exc}") from primary_exc

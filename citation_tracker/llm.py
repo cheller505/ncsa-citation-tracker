@@ -119,12 +119,23 @@ def is_configured() -> bool:
 
 
 def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str = "",
-             acknowledgements: str = "", model: str | None = None) -> Evaluation:
-    """Call one LLM; raise LLMError on failure so the caller can fall back."""
+             acknowledgements: str = "", model: str | None = None,
+             base_url: str | None = None, api_key: str | None = None,
+             timeout: int | None = None) -> Evaluation:
+    """Call one LLM (any OpenAI-compatible endpoint); raise LLMError on failure.
+
+    ``base_url``/``api_key`` default to the primary endpoint, but can be set to
+    point a call at a different backend (e.g. the local fallback).
+    """
     cfg = get_config()
-    if not is_configured():
-        raise LLMError("LLM not configured (set LLM_API_KEY or LLM_ENABLED=false).")
+    if not cfg.llm_enabled:
+        raise LLMError("LLM disabled (LLM_ENABLED=false).")
     model = model or cfg.llm_model
+    base_url = (base_url if base_url is not None else cfg.llm_base_url).rstrip("/")
+    api_key = api_key if api_key is not None else cfg.llm_api_key
+    timeout = timeout or cfg.llm_timeout
+    if not base_url:
+        raise LLMError("No LLM endpoint configured (set LLM_BASE_URL).")
 
     payload = {
         "model": model,
@@ -141,17 +152,17 @@ def evaluate(title: str, abstract: str = "", full_text: str = "", trigger: str =
         "response_format": {"type": "json_object"},
     }
     headers = {
-        "Authorization": f"Bearer {cfg.llm_api_key}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    url = f"{cfg.llm_base_url}/chat/completions"
+    url = f"{base_url}/chat/completions"
     try:
-        resp = get_session().post(url, json=payload, headers=headers, timeout=cfg.llm_timeout)
+        resp = get_session().post(url, json=payload, headers=headers, timeout=timeout)
         if resp.status_code in (400, 422):
             # Endpoint may not support response_format; retry without it.
             log.info("LLM rejected response_format (HTTP %s); retrying plain.", resp.status_code)
             payload.pop("response_format", None)
-            resp = get_session().post(url, json=payload, headers=headers, timeout=cfg.llm_timeout)
+            resp = get_session().post(url, json=payload, headers=headers, timeout=timeout)
     except Exception as exc:  # noqa: BLE001
         raise LLMError(f"LLM request failed: {exc}") from exc
 
@@ -204,30 +215,53 @@ def evaluate_quorum(title: str, abstract: str = "", full_text: str = "", trigger
     raises LLMError only if fewer than ``eval_min_responders`` respond.
     """
     cfg = get_config()
-    if not is_configured():
-        raise LLMError("LLM not configured (set LLM_API_KEY or LLM_ENABLED=false).")
-    models = cfg.eval_models or [cfg.llm_model]
+    if not cfg.llm_enabled:
+        raise LLMError("LLM disabled (LLM_ENABLED=false).")
+    primaries = cfg.eval_models or [cfg.llm_model]
+    fallbacks = cfg.eval_fallback_models
 
-    def _one(m: str):
-        try:
-            return m, evaluate(title, abstract, full_text, trigger, acknowledgements, model=m), None
-        except LLMError as exc:
-            return m, None, str(exc)
+    # Each board seat is a list of (model, base_url, api_key, tag) tried in order:
+    # the primary (Lumen) model first, then a local fallback model if configured.
+    seats: list[list[tuple]] = []
+    for i, pm in enumerate(primaries):
+        candidates = []
+        if cfg.llm_base_url and cfg.llm_api_key:
+            candidates.append((pm, cfg.llm_base_url, cfg.llm_api_key, "primary", cfg.llm_timeout))
+        if i < len(fallbacks) and cfg.local_llm_base_url:
+            candidates.append((fallbacks[i], cfg.local_llm_base_url, cfg.local_llm_api_key,
+                               "local", cfg.local_llm_timeout))
+        if candidates:
+            seats.append(candidates)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(models), 6)) as ex:
-        results = list(ex.map(_one, models))
+    def _run_seat(candidates):
+        last_err = None
+        for model, burl, key, tag, tmo in candidates:
+            try:
+                ev = evaluate(title, abstract, full_text, trigger, acknowledgements,
+                              model=model, base_url=burl, api_key=key, timeout=tmo)
+                return {"model": model, "endpoint": tag, "ev": ev}
+            except LLMError as exc:
+                last_err = f"{model} ({tag}): {exc}"
+                log.warning("Quorum seat candidate failed: %s", last_err)
+        return {"error": last_err or "no candidates configured"}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(seats), 6) or 1) as ex:
+        results = list(ex.map(_run_seat, seats))
 
     votes: list[dict] = []
     responders: list[tuple[str, Evaluation]] = []
-    for m, e, err in results:
-        if e is not None:
-            votes.append({"model": m, "uses_system": e.uses_system, "systems": e.systems,
+    for r in results:
+        if "ev" in r:
+            e = r["ev"]
+            votes.append({"model": r["model"], "endpoint": r["endpoint"],
+                          "uses_system": e.uses_system, "systems": e.systems,
                           "confidence": round(e.confidence, 2),
                           "reasoning": (e.reasoning or "")[:300]})
-            responders.append((m, e))
+            responders.append((r["model"], e))
         else:
-            votes.append({"model": m, "error": err})
-            log.warning("Quorum: model %s failed: %s", m, err)
+            votes.append({"error": r["error"]})
+
+    used_local = any(v.get("endpoint") == "local" for v in votes)
 
     if len(responders) < cfg.eval_min_responders:
         if responders:
@@ -238,7 +272,7 @@ def evaluate_quorum(title: str, abstract: str = "", full_text: str = "", trigger
                 source=f"quorum-degraded:{m}",
             )
             return degraded, votes
-        raise LLMError(f"Quorum failed: 0/{len(models)} board models responded.")
+        raise LLMError(f"Quorum failed: 0/{len(seats)} board seats responded.")
 
     total = len(responders)
     yes = [e for _, e in responders if e.uses_system]
@@ -259,12 +293,14 @@ def evaluate_quorum(title: str, abstract: str = "", full_text: str = "", trigger
 
     names = ", ".join(m for m, _ in responders)
     verdict = "used" if decision_yes else "did not use"
-    reasoning = f"Board: {agree}/{total} models ({names}) agreed the paper {verdict} a tracked resource."
+    note = " (local fallback)" if used_local else ""
+    reasoning = (f"Board: {agree}/{total} models ({names}) agreed the paper {verdict} "
+                 f"a tracked resource{note}.")
     return Evaluation(
         uses_system=decision_yes and bool(systems),
         systems=systems,
         confidence=confidence,
         usage_context=usage,
         reasoning=reasoning,
-        source=f"quorum({agree}/{total})",
+        source=f"quorum({agree}/{total}){'+local' if used_local else ''}",
     ), votes
