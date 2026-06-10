@@ -209,10 +209,13 @@ confidence, and reasoning. New records land as **Pending** (used) or **Rejected*
 (not used); a human makes the final call. The automated pipeline never overrides
 a record a human has already Verified or Rejected.
 
-**Graceful degradation.** If some board models error or time out, the decision is
-made from whoever responded (down to `EVAL_MIN_RESPONDERS`). Below that it falls
-back to a single model, and if the LLM service is entirely unreachable, to a transparent
-keyword heuristic (flagged `via=heuristic`, low confidence).
+**Graceful degradation.** Each board seat tries its primary (remote) model first,
+then — if configured — a **local fallback model** on a separate endpoint (see
+below), so the board keeps working through a full outage of the primary service.
+If a seat still can't get a verdict, the decision is made from whoever responded
+(down to `EVAL_MIN_RESPONDERS`); below that it degrades to a single responder,
+and if nothing answers, to a transparent keyword heuristic (`via=heuristic`, low
+confidence). Verdicts that used a local model are tagged `quorum(n/m)+local`.
 
 **Configuration** (see `.env.example`):
 
@@ -230,6 +233,46 @@ keyword heuristic (flagged `via=heuristic`, low confidence).
 > families, which is the condition under which an ensemble actually reduces error
 > rather than just echoing one model thrice. Local inference on NCSA hardware is
 > free, so the 3× cost is a non-issue.
+
+### Local fallback board (optional)
+
+For resilience when the primary LLM service is unreachable, each board seat can
+fall back to a small model running locally (e.g. [Ollama](https://ollama.com)).
+This is **off by default**; enable it per host.
+
+1. **Install Ollama** and pull three small, diverse models (different families
+   give the ensemble its value):
+   ```bash
+   curl -fsSL https://ollama.com/install.sh | sh
+   ollama pull qwen2.5:3b
+   ollama pull llama3.2:3b
+   ollama pull gemma2:2b
+   ```
+2. **On a CPU-only host, tune Ollama** to keep the models resident and serve them
+   without thrashing (drop-in at `/etc/systemd/system/ollama.service.d/override.conf`):
+   ```ini
+   [Service]
+   Environment="OLLAMA_MAX_LOADED_MODELS=3"
+   Environment="OLLAMA_NUM_PARALLEL=1"
+   Environment="OLLAMA_KEEP_ALIVE=30m"
+   ```
+   then `sudo systemctl daemon-reload && sudo systemctl restart ollama`.
+3. **Point the tracker at it** in `.env`:
+   ```bash
+   LOCAL_LLM_BASE_URL=http://localhost:11434/v1
+   LOCAL_LLM_API_KEY=ollama
+   LOCAL_LLM_TIMEOUT=300        # CPU inference is slow
+   LOCAL_LLM_CONCURRENCY=1      # serialize on a few-core box (each gets full CPU)
+   EVAL_FALLBACK_MODELS=qwen2.5:3b,llama3.2:3b,gemma2:2b   # paired with EVAL_MODELS by position
+   CHAT_FALLBACK_MODEL=qwen2.5:3b
+   ```
+   `EVAL_FALLBACK_MODELS` is matched **positionally** to `EVAL_MODELS`, so seat 1's
+   primary falls back to the first local model, seat 2 to the second, etc.
+
+**CPU note:** on a few-core box the local board runs **serialized** (one model at
+a time, each with the full CPU) — running all three in parallel thrashes and
+times out. A full local-only pass is ~50–60 s/paper, which is fine as an outage
+backstop but slower than the remote board. A GPU host removes this limit.
 
 **Recall note.** Because models can only judge the evidence they're given, the
 biggest remaining error source is *missing* evidence — a paper whose only mention
