@@ -12,6 +12,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import re
+import threading
 from dataclasses import dataclass
 
 from .config import get_config
@@ -233,12 +234,21 @@ def evaluate_quorum(title: str, abstract: str = "", full_text: str = "", trigger
         if candidates:
             seats.append(candidates)
 
+    # Local (CPU) inference is serialized: 3 small models sharing a few cores run
+    # far faster one-at-a-time (full CPU each) than thrashing in parallel.
+    local_sem = threading.Semaphore(max(1, cfg.local_llm_concurrency))
+
     def _run_seat(candidates):
         last_err = None
         for model, burl, key, tag, tmo in candidates:
             try:
-                ev = evaluate(title, abstract, full_text, trigger, acknowledgements,
-                              model=model, base_url=burl, api_key=key, timeout=tmo)
+                if tag == "local":
+                    with local_sem:
+                        ev = evaluate(title, abstract, full_text, trigger, acknowledgements,
+                                      model=model, base_url=burl, api_key=key, timeout=tmo)
+                else:
+                    ev = evaluate(title, abstract, full_text, trigger, acknowledgements,
+                                  model=model, base_url=burl, api_key=key, timeout=tmo)
                 return {"model": model, "endpoint": tag, "ev": ev}
             except LLMError as exc:
                 last_err = f"{model} ({tag}): {exc}"

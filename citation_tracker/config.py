@@ -83,6 +83,7 @@ class Config:
     local_llm_base_url: str
     local_llm_api_key: str
     local_llm_timeout: int            # CPU inference is slow; allow more time
+    local_llm_concurrency: int        # max simultaneous local calls (CPU-bound → keep low)
     eval_fallback_models: list[str]   # positionally paired with eval_models
     chat_fallback_model: str
 
@@ -177,6 +178,7 @@ def get_config() -> Config:
         local_llm_base_url=os.environ.get("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1").rstrip("/"),
         local_llm_api_key=os.environ.get("LOCAL_LLM_API_KEY", "ollama").strip(),
         local_llm_timeout=int(os.environ.get("LOCAL_LLM_TIMEOUT", "300")),
+        local_llm_concurrency=int(os.environ.get("LOCAL_LLM_CONCURRENCY", "1")),
         eval_fallback_models=_get_list("EVAL_FALLBACK_MODELS", []),
         chat_fallback_model=os.environ.get("CHAT_FALLBACK_MODEL", "").strip(),
         # Display name for the LLM service. Generic by default; set SERVICE_NAME
