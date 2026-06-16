@@ -80,6 +80,12 @@ def _row_to_line(row, idx: int) -> str:
     return " | ".join(parts)
 
 
+# Records are included most-actionable-first so that, when the data is too large
+# for the model's context window, it's the verbose Rejected backlog that gets
+# dropped — never the Verified/Pending records a user is most likely to ask about.
+_STATUS_PRIORITY = {"Verified": 0, "Pending": 1, "Rejected": 2}
+
+
 def build_data_context(db_path=None) -> str:
     cfg = get_config()
     rows = db.fetch_all(db_path=db_path, limit=cfg.chat_max_rows)
@@ -90,10 +96,31 @@ def build_data_context(db_path=None) -> str:
         f"Pending={counts.get('Pending', 0)}, "
         f"Rejected={counts.get('Rejected', 0)}).\n"
     )
-    lines = [_row_to_line(r, i + 1) for i, r in enumerate(rows)]
+    # Stable sort: keep each status's recency order (fetch_all is updated_at DESC),
+    # but front-load Verified, then Pending, then Rejected.
+    ordered = sorted(rows, key=lambda r: _STATUS_PRIORITY.get(r["status"], 3))
+
+    # Fill up to the character budget; the counts header is always accurate even
+    # when rows are omitted, so counting questions stay correct.
+    budget = cfg.chat_context_budget
+    lines, used, included = [], 0, 0
+    for r in ordered:
+        line = _row_to_line(r, included + 1)
+        if lines and used + len(line) + 1 > budget:
+            break
+        lines.append(line)
+        used += len(line) + 1
+        included += 1
+
     note = ""
-    if len(rows) >= cfg.chat_max_rows:
-        note = f"\n(Showing the {cfg.chat_max_rows} most recently updated records.)"
+    omitted = len(rows) - included
+    if omitted > 0:
+        note = (
+            f"\n(Showing {included} of {sum(counts.values())} records, prioritizing "
+            f"Verified then Pending; {omitted} lower-priority records were omitted to "
+            f"fit the model's context window. The Totals line above is exact; ask about "
+            f"a specific paper, system, or status for details on the rest.)"
+        )
     return header + "\n".join(lines) + note
 
 

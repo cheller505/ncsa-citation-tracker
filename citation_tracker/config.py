@@ -95,6 +95,7 @@ class Config:
     chat_enabled: bool
     chat_model: str
     chat_max_rows: int
+    chat_context_budget: int   # max characters of record data sent to the chat model
 
     # --- Automatic discovery ---------------------------------------------
     discovery_queries: list[str]
@@ -188,6 +189,10 @@ def get_config() -> Config:
         chat_enabled=_get_bool("CHAT_ENABLED", True),
         chat_model=os.environ.get("CHAT_MODEL", "gemma-4-31b-it").strip(),
         chat_max_rows=int(os.environ.get("CHAT_MAX_ROWS", "400")),
+        # Small chat models have a bounded context window; cap the record data we
+        # stuff in so a large DB doesn't overflow it (upstream 500). ~60k chars
+        # (~15k tokens) fits gemma-4-31b-it with headroom for the reply.
+        chat_context_budget=int(os.environ.get("CHAT_CONTEXT_BUDGET", "60000")),
         discovery_queries=_get_list("DISCOVERY_QUERIES", _registry_queries()),
         discovery_limit=int(os.environ.get("DISCOVERY_LIMIT", "12")),
         ingest_interval_hours=float(os.environ.get("INGEST_INTERVAL_HOURS", "12")),

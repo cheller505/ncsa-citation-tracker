@@ -45,7 +45,11 @@ _DEFAULT_SYSTEMS: list[System] = [
         color="#0072B2",   # blue
         awards=("OAC-2005572",),
         aliases=("NCSA Delta", "Delta supercomputer", "Delta GPU", "Delta cluster"),
-        search_queries=("NCSA Delta supercomputer", "NCSA Delta GPU", "OAC-2005572"),
+        search_queries=(
+            "NCSA Delta supercomputer", "NCSA Delta GPU",
+            "Delta NCSA GPU", "Delta NCSA compute",
+            "OAC-2005572", "OAC 2005572",
+        ),
         false_positives=(
             "delta variant", "delta function", "river delta", "delta air lines",
             "kronecker delta", "dirac delta", "finite difference", "delta rule",
@@ -60,7 +64,7 @@ _DEFAULT_SYSTEMS: list[System] = [
         color="#56B4E9",   # sky blue (Delta sibling)
         awards=("OAC-2320345",),
         aliases=("NCSA DeltaAI", "Delta AI", "DeltaAI supercomputer"),
-        search_queries=("NCSA DeltaAI", "DeltaAI GPU NCSA", "OAC-2320345"),
+        search_queries=("NCSA DeltaAI", "DeltaAI GPU NCSA", "OAC-2320345", "OAC 2320345"),
         false_positives=(),
     ),
     System(
